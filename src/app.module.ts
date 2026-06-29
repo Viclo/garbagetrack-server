@@ -33,6 +33,7 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
         username: config.get<string>('database.username'),
         password: config.get<string>('database.password'),
         database: config.get<string>('database.name'),
+        ssl: config.get<boolean>('database.ssl') ? { rejectUnauthorized: false } : false,
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: config.get<string>('app.nodeEnv') !== 'production',
         logging: config.get<string>('app.nodeEnv') === 'development',

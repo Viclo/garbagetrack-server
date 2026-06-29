@@ -17,7 +17,7 @@ async function bootstrap(): Promise<void> {
 
   app.use(helmet());
   app.enableCors();
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', { exclude: ['/'] });
 
   app.useGlobalPipes(
     new ValidationPipe({

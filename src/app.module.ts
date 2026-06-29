@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AppController } from './app.controller';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { whatsappConfig } from './config/whatsapp.config';
@@ -52,5 +53,6 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
     WhatsappWebhookModule,
     SystemConfigModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}

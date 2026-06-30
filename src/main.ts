@@ -16,7 +16,10 @@ async function bootstrap(): Promise<void> {
   const nodeEnv = configService.get<string>('app.nodeEnv');
 
   app.use(helmet());
-  app.enableCors();
+  app.enableCors({
+    origin: configService.get<string[]>('app.corsOrigins'),
+    credentials: true,
+  });
   app.setGlobalPrefix('api/v1', { exclude: ['/'] });
 
   app.useGlobalPipes(

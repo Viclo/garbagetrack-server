@@ -48,7 +48,7 @@ async function bootstrap(): Promise<void> {
     console.log(`Swagger docs available at http://localhost:${port}/api/docs`);
   }
 
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(`GarbageTrack server running on port ${port} [${nodeEnv}]`);
 }
 

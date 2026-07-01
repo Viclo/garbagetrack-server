@@ -1,4 +1,4 @@
-import { IsNumber, IsNotEmpty, Min, Max } from 'class-validator';
+import { IsNumber, IsNotEmpty, IsOptional, Min, Max } from 'class-validator';
 
 export class GpsPositionInput {
   @IsNumber()
@@ -13,7 +13,7 @@ export class GpsPositionInput {
   @Max(180)
   longitude!: number;
 
+  @IsOptional()
   @IsNumber()
-  @IsNotEmpty()
-  timestamp!: number;
+  timestamp?: number;
 }

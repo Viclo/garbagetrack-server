@@ -46,6 +46,7 @@ interface ITruckPositionEvent {
   longitude: number;
   segmentIndex: number | null;
   streetName: string | null;
+  timestamp: string;
 }
 
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/tracking' })
@@ -162,6 +163,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       longitude: position.longitude,
       segmentIndex: result?.segmentIndex ?? null,
       streetName: result?.streetName ?? null,
+      timestamp: new Date().toISOString(),
     };
 
     this.server.to('admin-dashboard').emit('truck-position', event);

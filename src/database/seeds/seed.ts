@@ -2,6 +2,10 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../../app.module';
 import { AdminsService } from '../../modules/admins/services/admins.service';
 import { DriversService } from '../../modules/drivers/services/drivers.service';
+import { TenantsService } from '../../modules/tenants/services/tenants.service';
+import { TenantContextService } from '../../common/context/tenant-context.service';
+
+const SEED_TENANT_NAME = process.env.SEED_TENANT_NAME ?? 'GarbageTrack';
 
 const SEED_ADMINS = [{ username: 'admin', password: 'Admin123!', name: 'Administrator' }];
 
@@ -20,30 +24,41 @@ async function seed(): Promise<void> {
     logger: ['error', 'warn'],
   });
 
+  const tenantsService = app.get(TenantsService);
+  const tenantContext = app.get(TenantContextService);
   const adminsService = app.get(AdminsService);
   const driversService = app.get(DriversService);
 
   console.log('\nRunning GarbageTrack seed...\n');
 
-  for (const data of SEED_ADMINS) {
-    const existing = await adminsService.findByUsername(data.username);
-    if (existing) {
-      console.log(`  [skip] Admin "${data.username}" already exists`);
-      continue;
-    }
-    await adminsService.create(data);
-    console.log(`  [ok]   Created ADMIN: username="${data.username}" password="${data.password}"`);
-  }
+  const tenant = await tenantsService.ensureDefault(SEED_TENANT_NAME);
+  console.log(`  [ok]   Tenant "${tenant.name}" (slug="${tenant.slug}", id=${tenant.id})`);
 
-  for (const data of SEED_DRIVERS) {
-    const existing = await driversService.findByUsername(data.username);
-    if (existing) {
-      console.log(`  [skip] Driver "${data.username}" already exists`);
-      continue;
+  await tenantContext.runWith(tenant.id, async () => {
+    for (const data of SEED_ADMINS) {
+      const existing = await adminsService.findByUsername(data.username);
+      if (existing) {
+        console.log(`  [skip] Admin "${data.username}" already exists`);
+        continue;
+      }
+      await adminsService.create(data);
+      console.log(
+        `  [ok]   Created ADMIN: username="${data.username}" password="${data.password}"`,
+      );
     }
-    await driversService.create(data);
-    console.log(`  [ok]   Created DRIVER: username="${data.username}" password="${data.password}"`);
-  }
+
+    for (const data of SEED_DRIVERS) {
+      const existing = await driversService.findByUsername(data.username);
+      if (existing) {
+        console.log(`  [skip] Driver "${data.username}" already exists`);
+        continue;
+      }
+      await driversService.create(data);
+      console.log(
+        `  [ok]   Created DRIVER: username="${data.username}" password="${data.password}"`,
+      );
+    }
+  });
 
   await app.close();
   console.log('\nSeed completed.\n');

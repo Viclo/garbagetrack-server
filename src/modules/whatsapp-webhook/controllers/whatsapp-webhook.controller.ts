@@ -15,6 +15,8 @@ import { ConfigService } from '@nestjs/config';
 import { WhatsappWebhookService } from '../services/whatsapp-webhook.service';
 import { Public } from '../../../common/decorators/public.decorator';
 import { IWhatsAppWebhookPayload } from '../interfaces/whatsapp-message.interface';
+import { TenantContextService } from '../../../common/context/tenant-context.service';
+import { TenantsService, DEFAULT_TENANT_SLUG } from '../../tenants/services/tenants.service';
 
 @ApiTags('whatsapp-webhook')
 @Controller('whatsapp/webhook')
@@ -24,6 +26,8 @@ export class WhatsappWebhookController {
   constructor(
     private readonly webhookService: WhatsappWebhookService,
     private readonly configService: ConfigService,
+    private readonly tenantContext: TenantContextService,
+    private readonly tenantsService: TenantsService,
   ) {}
 
   @Public()
@@ -53,14 +57,28 @@ export class WhatsappWebhookController {
     let handled = 0;
     for (const entry of payload.entry ?? []) {
       for (const change of entry.changes ?? []) {
-        const { messages, contacts } = change.value;
+        const { messages, contacts, metadata } = change.value;
         if (!messages?.length) continue;
 
+        // One Meta webhook serves every municipality: the business number that
+        // received the message (phone_number_id) identifies the tenant.
+        const tenantId = await this.resolveTenantId(metadata?.phone_number_id);
+        if (tenantId == null) {
+          this.logger.warn(
+            `No tenant matches phone_number_id=${metadata?.phone_number_id ?? 'n/a'} — dropping ${messages.length} message(s)`,
+          );
+          continue;
+        }
+
         for (const message of messages) {
-          this.logger.log(`Incoming WhatsApp message type="${message.type}" from=${message.from}`);
+          this.logger.log(
+            `Incoming WhatsApp message type="${message.type}" from=${message.from} tenant=${tenantId}`,
+          );
           const contact = contacts?.find((c) => c.wa_id === message.from);
           const contactName = contact?.profile.name ?? 'Vecino/a';
-          await this.webhookService.handleIncomingMessage(message, contactName);
+          await this.tenantContext.runWith(tenantId, () =>
+            this.webhookService.handleIncomingMessage(message, contactName),
+          );
           handled += 1;
         }
       }
@@ -70,5 +88,19 @@ export class WhatsappWebhookController {
       this.logger.debug('Webhook received with no inbound messages to process');
     }
     return 'EVENT_RECEIVED';
+  }
+
+  /**
+   * Tenant owning the receiving business number; falls back to the default
+   * tenant when no tenant has claimed the number (single-tenant deployments
+   * that still use the WHATSAPP_* env credentials).
+   */
+  private async resolveTenantId(phoneNumberId: string | undefined): Promise<number | null> {
+    if (phoneNumberId) {
+      const tenant = await this.tenantsService.findByWaPhoneNumberId(phoneNumberId);
+      if (tenant?.isActive) return tenant.id;
+    }
+    const fallback = await this.tenantsService.findBySlug(DEFAULT_TENANT_SLUG);
+    return fallback?.isActive ? fallback.id : null;
   }
 }

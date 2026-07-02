@@ -8,15 +8,25 @@ import {
   UpdateDateColumn,
   BeforeInsert,
   BeforeUpdate,
+  Unique,
 } from 'typeorm';
 import { Route } from '../../routes/entities/route.entity';
+import { Tenant } from '../../tenants/entities/tenant.entity';
 
 @Entity('residents')
+@Unique(['tenantId', 'phoneNumber'])
 export class Resident {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ name: 'phone_number', unique: true })
+  @ManyToOne(() => Tenant, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant!: Tenant;
+
+  @Column({ name: 'tenant_id' })
+  tenantId!: number;
+
+  @Column({ name: 'phone_number' })
   phoneNumber!: string;
 
   @Column({ type: 'double precision' })

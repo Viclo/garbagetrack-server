@@ -6,6 +6,7 @@ import { Driver } from '../../drivers/entities/driver.entity';
 import { Truck } from '../../trucks/entities/truck.entity';
 import { Route } from '../../routes/entities/route.entity';
 import { IRouteSessionSummary } from '../interfaces/tracking.interface';
+import { TenantContextService } from '../../../common/context/tenant-context.service';
 
 /** A session with no GPS activity for longer than this is considered abandoned. */
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
@@ -19,6 +20,7 @@ export class RouteSessionService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     @InjectRepository(RouteSession) private readonly sessionsRepo: Repository<RouteSession>,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   onModuleInit(): void {
@@ -52,6 +54,7 @@ export class RouteSessionService implements OnModuleInit, OnModuleDestroy {
       startedAt: now,
       lastActivityAt: now,
       endedAt: null,
+      tenantId: this.tenantContext.tenantId,
     });
     return this.sessionsRepo.save(session);
   }
@@ -110,8 +113,9 @@ export class RouteSessionService implements OnModuleInit, OnModuleDestroy {
 
   /** Per-driver cumulative total + session history for the admin view. */
   async getSummaries(driverId?: number): Promise<IRouteSessionSummary[]> {
+    const tenantId = this.tenantContext.tenantId;
     const sessions = await this.sessionsRepo.find({
-      where: driverId ? { driver: { id: driverId } } : {},
+      where: driverId ? { driver: { id: driverId }, tenantId } : { tenantId },
       relations: ['driver', 'route'],
       order: { startedAt: 'DESC' },
     });

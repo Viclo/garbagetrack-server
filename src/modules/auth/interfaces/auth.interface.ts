@@ -5,6 +5,8 @@ export interface IAuthUser {
   username: string;
   role: UserRole;
   name: string;
+  tenantId: number;
+  tenantName: string;
 }
 
 export interface ILoginResponse {

@@ -10,6 +10,7 @@ import {
 import { Driver } from '../../drivers/entities/driver.entity';
 import { Truck } from '../../trucks/entities/truck.entity';
 import { Route } from '../../routes/entities/route.entity';
+import { Tenant } from '../../tenants/entities/tenant.entity';
 
 /**
  * A single driving session: from when a driver taps "Iniciar Ruta" until they
@@ -21,6 +22,13 @@ import { Route } from '../../routes/entities/route.entity';
 export class RouteSession {
   @PrimaryGeneratedColumn()
   id!: number;
+
+  @ManyToOne(() => Tenant, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant!: Tenant;
+
+  @Column({ name: 'tenant_id' })
+  tenantId!: number;
 
   @ManyToOne(() => Driver, { eager: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'driver_id' })

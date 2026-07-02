@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { whatsappConfig } from './config/whatsapp.config';
+import { TenantsModule } from './modules/tenants/tenants.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdminsModule } from './modules/admins/admins.module';
 import { DriversModule } from './modules/drivers/drivers.module';
@@ -40,6 +41,7 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
         logging: config.get<string>('app.nodeEnv') === 'development',
       }),
     }),
+    TenantsModule,
     AuthModule,
     AdminsModule,
     DriversModule,

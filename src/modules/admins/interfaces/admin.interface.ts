@@ -1,5 +1,6 @@
 export interface IAdmin {
   id: number;
+  tenantId: number;
   username: string;
   name: string;
   isActive: boolean;

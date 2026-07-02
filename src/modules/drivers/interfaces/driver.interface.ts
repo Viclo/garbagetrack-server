@@ -1,5 +1,6 @@
 export interface IDriver {
   id: number;
+  tenantId: number;
   username: string;
   name: string;
   phone: string | null;

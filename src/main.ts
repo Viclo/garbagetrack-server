@@ -7,6 +7,8 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { TenantContextInterceptor } from './common/context/tenant-context.interceptor';
+import { TenantContextService } from './common/context/tenant-context.service';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -34,7 +36,11 @@ async function bootstrap(): Promise<void> {
   const reflector = app.get(Reflector);
   app.useGlobalGuards(new JwtAuthGuard(reflector));
   app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalInterceptors(new ResponseInterceptor());
+  // Tenant context first so every downstream handler runs inside it.
+  app.useGlobalInterceptors(
+    new TenantContextInterceptor(app.get(TenantContextService)),
+    new ResponseInterceptor(),
+  );
 
   if (nodeEnv !== 'production') {
     const swaggerConfig = new DocumentBuilder()

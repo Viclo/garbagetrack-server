@@ -11,20 +11,24 @@ import { Driver } from '../../drivers/entities/driver.entity';
 import { CreateTruckInput } from '../dtos/inputs/create-truck.input';
 import { UpdateTruckInput } from '../dtos/inputs/update-truck.input';
 import { ITruck } from '../interfaces/truck.interface';
+import { TenantContextService } from '../../../common/context/tenant-context.service';
 
 @Injectable()
 export class TrucksService {
   constructor(
     @InjectRepository(Truck) private readonly trucksRepo: Repository<Truck>,
     @InjectRepository(Driver) private readonly driversRepo: Repository<Driver>,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   async create(input: CreateTruckInput): Promise<ITruck> {
-    const existingName = await this.trucksRepo.findOne({ where: { name: input.name } });
+    const tenantId = this.tenantContext.tenantId;
+
+    const existingName = await this.trucksRepo.findOne({ where: { name: input.name, tenantId } });
     if (existingName) throw new ConflictException(`Truck name "${input.name}" is already taken`);
 
     const existingPlate = await this.trucksRepo.findOne({
-      where: { licensePlate: input.licensePlate },
+      where: { licensePlate: input.licensePlate, tenantId },
     });
     if (existingPlate)
       throw new ConflictException(`License plate "${input.licensePlate}" is already registered`);
@@ -38,37 +42,49 @@ export class TrucksService {
       name: input.name,
       licensePlate: input.licensePlate,
       driver,
+      tenantId,
     });
     return this.trucksRepo.save(truck);
   }
 
   async findAll(): Promise<ITruck[]> {
-    return this.trucksRepo.find({ relations: ['driver'], order: { name: 'ASC' } });
+    return this.trucksRepo.find({
+      where: { tenantId: this.tenantContext.tenantId },
+      relations: ['driver'],
+      order: { name: 'ASC' },
+    });
   }
 
   async findOne(id: number): Promise<ITruck> {
-    const truck = await this.trucksRepo.findOne({ where: { id }, relations: ['driver'] });
+    const truck = await this.trucksRepo.findOne({
+      where: { id, tenantId: this.tenantContext.tenantId },
+      relations: ['driver'],
+    });
     if (!truck) throw new NotFoundException(`Truck with ID ${id} not found`);
     return truck;
   }
 
   async getStats(): Promise<{ total: number; active: number }> {
+    const tenantId = this.tenantContext.tenantId;
     const [total, active] = await Promise.all([
-      this.trucksRepo.count(),
-      this.trucksRepo.count({ where: { isActive: true } }),
+      this.trucksRepo.count({ where: { tenantId } }),
+      this.trucksRepo.count({ where: { tenantId, isActive: true } }),
     ]);
     return { total, active };
   }
 
   async findByDriverId(driverId: number): Promise<Truck | null> {
     return this.trucksRepo.findOne({
-      where: { driver: { id: driverId }, isActive: true },
+      where: { driver: { id: driverId }, isActive: true, tenantId: this.tenantContext.tenantId },
       relations: ['driver'],
     });
   }
 
   async update(id: number, input: UpdateTruckInput): Promise<ITruck> {
-    const truck = await this.trucksRepo.findOne({ where: { id }, relations: ['driver'] });
+    const truck = await this.trucksRepo.findOne({
+      where: { id, tenantId: this.tenantContext.tenantId },
+      relations: ['driver'],
+    });
     if (!truck) throw new NotFoundException(`Truck with ID ${id} not found`);
 
     if (input.name !== undefined) truck.name = input.name;
@@ -83,13 +99,17 @@ export class TrucksService {
   }
 
   async remove(id: number): Promise<void> {
-    const truck = await this.trucksRepo.findOne({ where: { id } });
+    const truck = await this.trucksRepo.findOne({
+      where: { id, tenantId: this.tenantContext.tenantId },
+    });
     if (!truck) throw new NotFoundException(`Truck with ID ${id} not found`);
     await this.trucksRepo.remove(truck);
   }
 
   private async resolveDriver(driverId: number): Promise<Driver> {
-    const driver = await this.driversRepo.findOne({ where: { id: driverId } });
+    const driver = await this.driversRepo.findOne({
+      where: { id: driverId, tenantId: this.tenantContext.tenantId },
+    });
     if (!driver) throw new NotFoundException(`Driver with ID ${driverId} not found`);
     if (!driver.isActive) throw new BadRequestException(`Driver ${driverId} is not active`);
     return driver;

@@ -6,18 +6,29 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Unique,
 } from 'typeorm';
 import { Driver } from '../../drivers/entities/driver.entity';
+import { Tenant } from '../../tenants/entities/tenant.entity';
 
 @Entity('trucks')
+@Unique(['tenantId', 'name'])
+@Unique(['tenantId', 'licensePlate'])
 export class Truck {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ unique: true })
+  @ManyToOne(() => Tenant, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant!: Tenant;
+
+  @Column({ name: 'tenant_id' })
+  tenantId!: number;
+
+  @Column()
   name!: string;
 
-  @Column({ name: 'license_plate', unique: true })
+  @Column({ name: 'license_plate' })
   licensePlate!: string;
 
   @ManyToOne(() => Driver, { nullable: true, eager: false, onDelete: 'SET NULL' })

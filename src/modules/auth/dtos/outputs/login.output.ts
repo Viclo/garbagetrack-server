@@ -6,6 +6,8 @@ class AuthUserOutput {
   @ApiProperty() username!: string;
   @ApiProperty({ enum: UserRole }) role!: UserRole;
   @ApiProperty() name!: string;
+  @ApiProperty() tenantId!: number;
+  @ApiProperty() tenantName!: string;
 }
 
 export class LoginOutput {

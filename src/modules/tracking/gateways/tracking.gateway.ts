@@ -24,6 +24,10 @@ import {
   IRouteStartedEvent,
   ITruckPositionEvent,
 } from '../interfaces/tracking.interface';
+import { TenantContextService } from '../../../common/context/tenant-context.service';
+
+/** Admin dashboards join per-tenant rooms so a municipality only sees its own trucks. */
+const adminRoom = (tenantId: number): string => `tenant:${tenantId}:admin`;
 
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/tracking' })
 export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -38,6 +42,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly trucksService: TrucksService,
     private readonly schedulesService: SchedulesService,
     private readonly jwtService: JwtService,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -56,11 +61,13 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       client.data = { user: payload } satisfies IDriverClientData;
 
       if (payload.role === UserRole.ADMIN) {
-        await client.join('admin-dashboard');
-        this.logger.log(`Admin connected: user ${payload.sub}`);
+        await client.join(adminRoom(payload.tenantId));
+        this.logger.log(`Admin connected: user ${payload.sub} (tenant ${payload.tenantId})`);
       } else {
-        this.logger.log(`Driver connected: user ${payload.sub}`);
-        await this.resumeOpenSession(client, payload);
+        this.logger.log(`Driver connected: user ${payload.sub} (tenant ${payload.tenantId})`);
+        await this.tenantContext.runWith(payload.tenantId, () =>
+          this.resumeOpenSession(client, payload),
+        );
       }
     } catch {
       client.disconnect();
@@ -117,7 +124,9 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   handleDisconnect(client: Socket): void {
     const data = client.data as IDriverClientData;
     if (data?.truckId) {
-      this.server.to('admin-dashboard').emit('truck-offline', { truckId: data.truckId });
+      this.server
+        .to(adminRoom(data.user.tenantId))
+        .emit('truck-offline', { truckId: data.truckId });
     }
   }
 
@@ -131,6 +140,13 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       return { event: 'error', data: 'Only drivers can start a route' };
     }
 
+    return this.tenantContext.runWith(data.user.tenantId, () => this.startRoute(client, data));
+  }
+
+  private async startRoute(
+    client: Socket,
+    data: IDriverClientData,
+  ): Promise<{ event: string; data: IRouteStartedEvent | string }> {
     const truck = await this.trucksService.findByDriverId(data.user.sub);
     if (!truck) return { event: 'error', data: 'No active truck assigned to this driver' };
 
@@ -170,49 +186,58 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: Socket,
     @MessageBody() position: GpsPositionInput,
   ): Promise<void> {
-    const { truckId, routeId, sessionId } = client.data as IDriverClientData;
+    const data = client.data as IDriverClientData;
+    const { truckId, routeId, sessionId } = data;
     if (!truckId || !routeId) return;
 
-    if (sessionId) {
-      await this.routeSessionService
-        .recordActivity(sessionId)
-        .catch((err) =>
-          this.logger.error(`Failed to record activity for session ${sessionId}`, err),
-        );
-    }
+    await this.tenantContext.runWith(data.user.tenantId, async () => {
+      if (sessionId) {
+        await this.routeSessionService
+          .recordActivity(sessionId)
+          .catch((err) =>
+            this.logger.error(`Failed to record activity for session ${sessionId}`, err),
+          );
+      }
 
-    const result = await this.trackingService
-      .processGpsUpdate(truckId, routeId, position)
-      .catch((err) => {
-        this.logger.error(`GPS update failed for truck ${truckId}`, err);
-        return null;
-      });
+      const result = await this.trackingService
+        .processGpsUpdate(truckId, routeId, position)
+        .catch((err) => {
+          this.logger.error(`GPS update failed for truck ${truckId}`, err);
+          return null;
+        });
 
-    const event: ITruckPositionEvent = {
-      truckId,
-      routeId,
-      latitude: position.latitude,
-      longitude: position.longitude,
-      segmentIndex: result?.segmentIndex ?? null,
-      streetName: result?.streetName ?? null,
-      timestamp: new Date().toISOString(),
-    };
+      const event: ITruckPositionEvent = {
+        truckId,
+        routeId,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        segmentIndex: result?.segmentIndex ?? null,
+        streetName: result?.streetName ?? null,
+        timestamp: new Date().toISOString(),
+      };
 
-    this.server.to('admin-dashboard').emit('truck-position', event);
+      this.server.to(adminRoom(data.user.tenantId)).emit('truck-position', event);
+    });
   }
 
   @SubscribeMessage('stop-route')
   async handleStopRoute(@ConnectedSocket() client: Socket): Promise<void> {
     const data = client.data as IDriverClientData;
     if (data.truckId) {
-      this.server.to('admin-dashboard').emit('truck-offline', { truckId: data.truckId });
+      this.server
+        .to(adminRoom(data.user.tenantId))
+        .emit('truck-offline', { truckId: data.truckId });
       this.logger.log(`Driver ${data.user.sub} stopped route for truck ${data.truckId}`);
     }
     // Explicit stop ends the driving session (a mere disconnect does not, so the
     // timer keeps counting through short offline gaps).
-    await this.routeSessionService
-      .stop(data.user.sub)
-      .catch((err) => this.logger.error(`Failed to stop session for driver ${data.user.sub}`, err));
+    await this.tenantContext.runWith(data.user.tenantId, () =>
+      this.routeSessionService
+        .stop(data.user.sub)
+        .catch((err) =>
+          this.logger.error(`Failed to stop session for driver ${data.user.sub}`, err),
+        ),
+    );
     client.data = { user: data.user } satisfies IDriverClientData;
   }
 }

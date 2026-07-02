@@ -7,11 +7,19 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import { Truck } from '../../trucks/entities/truck.entity';
+import { Tenant } from '../../tenants/entities/tenant.entity';
 
 @Entity('truck_positions')
 export class TruckPosition {
   @PrimaryGeneratedColumn()
   id!: number;
+
+  @ManyToOne(() => Tenant, { nullable: false, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant!: Tenant;
+
+  @Column({ name: 'tenant_id' })
+  tenantId!: number;
 
   @ManyToOne(() => Truck, { eager: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'truck_id' })

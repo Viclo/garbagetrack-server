@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
 import { IWhatsAppApiResponse, ITemplateComponent } from '../interfaces/whatsapp-api.interface';
 import { IWhatsAppMessageResult } from '../interfaces/notification.interface';
@@ -45,16 +46,16 @@ export class WhatsAppApiService {
     });
   }
 
-  /**
-   * Resolves the WhatsApp business number tied to the configured credentials by
-   * querying the phone-number node. This is the number residents must message, so
-   * the registration QR is always built from Meta — never a manually typed value.
-   */
   async getBusinessPhone(): Promise<{
     displayPhoneNumber: string;
     verifiedName: string | null;
   } | null> {
-    if (!this.phoneNumberId || !this.accessToken) return null;
+    if (!this.phoneNumberId || !this.accessToken) {
+      this.logger.warn(
+        `WhatsApp credentials missing — phoneNumberId: ${this.phoneNumberId ? 'set' : 'MISSING'}, accessToken: ${this.accessToken ? 'set' : 'MISSING'} (apiVersion: ${this.apiVersion})`,
+      );
+      return null;
+    }
 
     const url = `${this.baseUrl}/${this.apiVersion}/${this.phoneNumberId}?fields=display_phone_number,verified_name`;
     try {
@@ -64,10 +65,19 @@ export class WhatsAppApiService {
         }),
       );
       const displayPhoneNumber = response.data.display_phone_number;
-      if (!displayPhoneNumber) return null;
+      if (!displayPhoneNumber) {
+        this.logger.warn(
+          `WhatsApp phone node returned no display_phone_number: ${JSON.stringify(response.data)}`,
+        );
+        return null;
+      }
       return { displayPhoneNumber, verifiedName: response.data.verified_name ?? null };
     } catch (error) {
-      this.logger.error('Failed to fetch WhatsApp business phone number', error);
+      const axiosError = error as AxiosError;
+      this.logger.error(
+        `Failed to fetch WhatsApp business phone number (GET ${this.apiVersion}/${this.phoneNumberId}) — ` +
+          `status ${axiosError.response?.status ?? 'n/a'}: ${JSON.stringify(axiosError.response?.data ?? axiosError.message)}`,
+      );
       return null;
     }
   }

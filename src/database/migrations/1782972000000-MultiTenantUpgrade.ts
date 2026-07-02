@@ -48,10 +48,25 @@ export class MultiTenantUpgrade1782972000000 implements MigrationInterface {
       `SELECT id FROM tenants WHERE slug = 'default'`,
     )) as Array<{ id: number }>;
 
-    // 2. Add tenant_id to every tenant-owned table, backfilled to the default
-    //    tenant. The DEFAULT keeps the previous app version working while the
-    //    new one deploys (its INSERTs don't send tenant_id yet).
+    // 2a. A legacy database only has tables for the entities its deployed code
+    //     version knew (schema came from synchronize). Newer feature tables may
+    //     be missing entirely — create those directly in their final
+    //     multi-tenant shape.
+    await this.createMissingTables(queryRunner, defaultTenantId);
     for (const table of TENANT_TABLES) {
+      if (!(await queryRunner.hasTable(table))) {
+        throw new Error(
+          `MultiTenantUpgrade: table "${table}" is missing and has no creation DDL in this migration`,
+        );
+      }
+    }
+
+    // 2b. Add tenant_id to every pre-existing tenant-owned table, backfilled to
+    //     the default tenant. The DEFAULT keeps the previous app version working
+    //     while the new one deploys (its INSERTs don't send tenant_id yet).
+    for (const table of TENANT_TABLES) {
+      // Tables created by createMissingTables are already multi-tenant.
+      if (await queryRunner.hasColumn(table, 'tenant_id')) continue;
       await queryRunner.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS tenant_id INT`);
       await queryRunner.query(
         `UPDATE ${table} SET tenant_id = ${defaultTenantId} WHERE tenant_id IS NULL`,
@@ -104,6 +119,62 @@ export class MultiTenantUpgrade1782972000000 implements MigrationInterface {
     );
   }
 
+  /**
+   * Feature tables that may not exist on a legacy database (added after some
+   * deployments were created). DDL matches InitialSchema plus the multi-tenant
+   * columns/constraints this migration adds elsewhere.
+   */
+  private async createMissingTables(
+    queryRunner: QueryRunner,
+    defaultTenantId: number,
+  ): Promise<void> {
+    if (!(await queryRunner.hasTable('route_sessions'))) {
+      await queryRunner.query(
+        `CREATE TABLE "route_sessions" (
+           "id" SERIAL NOT NULL,
+           "tenant_id" integer NOT NULL DEFAULT ${defaultTenantId},
+           "started_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+           "ended_at" TIMESTAMP WITH TIME ZONE,
+           "last_activity_at" TIMESTAMP WITH TIME ZONE NOT NULL,
+           "driver_id" integer,
+           "truck_id" integer,
+           "route_id" integer,
+           CONSTRAINT "PK_route_sessions" PRIMARY KEY ("id"),
+           CONSTRAINT fk_route_sessions_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+           CONSTRAINT fk_route_sessions_driver FOREIGN KEY (driver_id) REFERENCES drivers(id) ON DELETE CASCADE,
+           CONSTRAINT fk_route_sessions_truck FOREIGN KEY (truck_id) REFERENCES trucks(id) ON DELETE SET NULL,
+           CONSTRAINT fk_route_sessions_route FOREIGN KEY (route_id) REFERENCES routes(id) ON DELETE SET NULL
+         )`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX idx_route_sessions_ended_at ON route_sessions (ended_at)`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX idx_route_sessions_tenant ON route_sessions (tenant_id)`,
+      );
+    }
+
+    if (!(await queryRunner.hasTable('truck_positions'))) {
+      await queryRunner.query(
+        `CREATE TABLE "truck_positions" (
+           "id" SERIAL NOT NULL,
+           "tenant_id" integer NOT NULL DEFAULT ${defaultTenantId},
+           "latitude" double precision NOT NULL,
+           "longitude" double precision NOT NULL,
+           "current_segment_index" integer,
+           "timestamp" TIMESTAMP NOT NULL DEFAULT now(),
+           "truck_id" integer,
+           CONSTRAINT "PK_truck_positions" PRIMARY KEY ("id"),
+           CONSTRAINT fk_truck_positions_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+           CONSTRAINT fk_truck_positions_truck FOREIGN KEY (truck_id) REFERENCES trucks(id) ON DELETE CASCADE
+         )`,
+      );
+      await queryRunner.query(
+        `CREATE INDEX idx_truck_positions_tenant ON truck_positions (tenant_id)`,
+      );
+    }
+  }
+
   public async down(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasColumn('admins', 'tenant_id'))) return;
 
@@ -118,6 +189,7 @@ export class MultiTenantUpgrade1782972000000 implements MigrationInterface {
     );
 
     for (const table of TENANT_TABLES) {
+      if (!(await queryRunner.hasTable(table))) continue;
       await queryRunner.query(`ALTER TABLE ${table} DROP CONSTRAINT IF EXISTS fk_${table}_tenant`);
       await queryRunner.query(`DROP INDEX IF EXISTS idx_${table}_tenant`);
       await queryRunner.query(`ALTER TABLE ${table} DROP COLUMN IF EXISTS tenant_id`);

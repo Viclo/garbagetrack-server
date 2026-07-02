@@ -37,7 +37,12 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
         database: config.get<string>('database.name'),
         ssl: config.get<boolean>('database.ssl') ? { rejectUnauthorized: false } : false,
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: config.get<string>('app.nodeEnv') !== 'production',
+        // Schema is managed by migrations (src/database/migrations), which run
+        // automatically at boot — a push to main deploys code AND schema.
+        // After changing an entity run: npm run migration:generate
+        synchronize: false,
+        migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
+        migrationsRun: true,
         logging: config.get<string>('app.nodeEnv') === 'development',
       }),
     }),

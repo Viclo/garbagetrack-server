@@ -58,6 +58,15 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       const token = rawToken.replace('Bearer ', '');
       const payload = this.jwtService.verify<IJwtPayload>(token);
+
+      // Pre-multi-tenant JWTs have no tenantId; force those clients to re-login
+      // instead of letting them write rows without a tenant.
+      if (payload.tenantId == null) {
+        this.logger.warn(`Rejecting socket with legacy token (no tenantId): user ${payload.sub}`);
+        client.disconnect();
+        return;
+      }
+
       client.data = { user: payload } satisfies IDriverClientData;
 
       if (payload.role === UserRole.ADMIN) {

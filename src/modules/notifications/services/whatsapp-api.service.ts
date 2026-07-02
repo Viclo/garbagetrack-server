@@ -127,7 +127,11 @@ export class WhatsAppApiService {
       );
       return { messageId: response.data.messages[0]?.id ?? '', status: 'sent' };
     } catch (error) {
-      this.logger.error('WhatsApp API call failed', error);
+      const axiosError = error as AxiosError;
+      this.logger.error(
+        `WhatsApp send failed (POST ${this.apiVersion}/${credentials.phoneNumberId}/messages, to=${String(payload.to)}) — ` +
+          `status ${axiosError.response?.status ?? 'n/a'}: ${JSON.stringify(axiosError.response?.data ?? axiosError.message)}`,
+      );
       return { messageId: '', status: 'failed' };
     }
   }

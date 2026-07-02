@@ -21,7 +21,8 @@ export class TenantContextService {
   /** Current tenant id; throws if called outside a tenant context. */
   get tenantId(): number {
     const store = this.als.getStore();
-    if (!store) throw new UnauthorizedException('No tenant in request context');
+    // tenantId can arrive undefined at runtime from pre-multi-tenant JWTs.
+    if (store?.tenantId == null) throw new UnauthorizedException('No tenant in request context');
     return store.tenantId;
   }
 

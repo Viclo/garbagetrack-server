@@ -1,15 +1,12 @@
--- Multi-tenant upgrade for EXISTING GarbageTrack databases.
+-- ⚠️ SUPERSEDED — kept only as reference / manual fallback.
 --
--- Fresh databases don't need this: TypeORM synchronize (dev) creates the new
--- schema, and `npm run seed` creates the default tenant.
+-- This upgrade now runs automatically as a TypeORM migration
+-- (src/database/migrations/1782972000000-MultiTenantUpgrade.ts) when the
+-- server boots (migrationsRun: true). You do NOT need to run this file:
+-- pushing to main deploys the code and the schema change together.
 --
--- Existing databases DO need it, because synchronize cannot add a NOT NULL
--- tenant_id column to tables that already contain rows. Run this script ONCE,
--- BEFORE starting the upgraded server:
---
+-- Manual use only if you ever need to upgrade a database without deploying:
 --   psql "$DATABASE_URL" -f docs/multi-tenant-upgrade.sql
---
--- It creates the default tenant and attaches every existing row to it.
 
 BEGIN;
 
@@ -51,6 +48,13 @@ BEGIN
     EXECUTE format(
       'ALTER TABLE %I ALTER COLUMN tenant_id SET NOT NULL', t
     );
+    -- DEFAULT keeps the PREVIOUS (pre-multi-tenant) app version working while
+    -- the new one deploys: its INSERTs don't send tenant_id yet. The new code
+    -- always sets tenant_id explicitly. Optionally drop the defaults once the
+    -- deploy is verified (see bottom of this file).
+    EXECUTE format(
+      'ALTER TABLE %I ALTER COLUMN tenant_id SET DEFAULT %s', t, default_tenant_id
+    );
     EXECUTE format(
       'ALTER TABLE %I ADD CONSTRAINT fk_%s_tenant FOREIGN KEY (tenant_id)
          REFERENCES tenants(id) ON DELETE CASCADE', t, t
@@ -86,3 +90,19 @@ ALTER TABLE residents      ADD CONSTRAINT uq_residents_tenant_phone UNIQUE (tena
 ALTER TABLE system_configs ADD CONSTRAINT uq_configs_tenant_key  UNIQUE (tenant_id, key);
 
 COMMIT;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- OPTIONAL CLEANUP — run only AFTER the new version is deployed and verified.
+-- Removes the transitional defaults so a future code path that forgets to set
+-- tenant_id fails loudly instead of silently landing in the default tenant.
+--
+-- DO $$
+-- DECLARE t TEXT;
+-- BEGIN
+--   FOREACH t IN ARRAY ARRAY[
+--     'admins','drivers','trucks','routes','residents','weekly_schedules',
+--     'notification_logs','system_configs','route_sessions','truck_positions'
+--   ] LOOP
+--     EXECUTE format('ALTER TABLE %I ALTER COLUMN tenant_id DROP DEFAULT', t);
+--   END LOOP;
+-- END $$;

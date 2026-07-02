@@ -9,13 +9,7 @@ import { UpdateRouteInput } from '../dtos/inputs/update-route.input';
 import { CreateSegmentInput } from '../dtos/inputs/create-segment.input';
 import { UpdateSegmentInput } from '../dtos/inputs/update-segment.input';
 import { ReplaceSegmentsInput } from '../dtos/inputs/replace-segments.input';
-import { IRoute, IRouteSegment } from '../interfaces/route.interface';
-
-interface INearestSegmentResult {
-  routeId: number;
-  segmentIndex: number;
-  streetName: string;
-}
+import { INearestSegmentResult, IRoute, IRouteSegment } from '../interfaces/route.interface';
 
 @Injectable()
 export class RoutesService {

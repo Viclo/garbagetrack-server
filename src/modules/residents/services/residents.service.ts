@@ -2,13 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Resident } from '../entities/resident.entity';
-import { IResident } from '../interfaces/resident.interface';
-
-interface INearestSegment {
-  routeId: number;
-  segmentIndex: number;
-  streetName: string;
-}
+import { INearestSegment, IResident } from '../interfaces/resident.interface';
 
 @Injectable()
 export class ResidentsService {

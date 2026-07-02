@@ -4,12 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { TruckPosition } from '../entities/truck-position.entity';
 import { ProximityService } from '../../proximity/services/proximity.service';
 import { GpsPositionInput } from '../dtos/inputs/gps-position.input';
-
-interface ISegmentMatch {
-  id: number;
-  segmentIndex: number;
-  streetName: string;
-}
+import { ISegmentMatch } from '../interfaces/tracking.interface';
 
 @Injectable()
 export class TrackingService {

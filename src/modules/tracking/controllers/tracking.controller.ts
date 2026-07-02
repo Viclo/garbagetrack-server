@@ -1,7 +1,8 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrackingService } from '../services/tracking.service';
-import { RouteSessionService, IRouteSessionSummary } from '../services/route-session.service';
+import { RouteSessionService } from '../services/route-session.service';
+import { IRouteSessionSummary } from '../interfaces/tracking.interface';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { UserRole } from '../../../common/enums/user-role.enum';

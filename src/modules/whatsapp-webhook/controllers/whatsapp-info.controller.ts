@@ -4,11 +4,7 @@ import { WhatsAppApiService } from '../../notifications/services/whatsapp-api.se
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { UserRole } from '../../../common/enums/user-role.enum';
-
-interface IBusinessNumberResponse {
-  displayPhoneNumber: string | null;
-  verifiedName: string | null;
-}
+import { IBusinessNumberResponse } from '../interfaces/business-number.interface';
 
 @ApiTags('whatsapp')
 @ApiBearerAuth()

@@ -1,3 +1,9 @@
+export interface INearestSegmentResult {
+  routeId: number;
+  segmentIndex: number;
+  streetName: string;
+}
+
 export interface IRouteSegment {
   id: number;
   segmentIndex: number;

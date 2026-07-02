@@ -1,3 +1,9 @@
+export interface INearestSegment {
+  routeId: number;
+  segmentIndex: number;
+  streetName: string;
+}
+
 export interface IResident {
   id: number;
   phoneNumber: string;

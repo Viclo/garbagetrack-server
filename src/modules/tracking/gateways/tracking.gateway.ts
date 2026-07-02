@@ -18,40 +18,12 @@ import { GpsPositionInput } from '../dtos/inputs/gps-position.input';
 import { IJwtPayload } from '../../../common/interfaces/jwt-payload.interface';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { WeeklySchedule } from '../../schedules/entities/weekly-schedule.entity';
-
-interface IDriverClientData {
-  user: IJwtPayload;
-  truckId?: number;
-  routeId?: number;
-  sessionId?: number;
-}
-
-interface IDriverRouteSegment {
-  streetName: string;
-  startLatitude: number;
-  startLongitude: number;
-  endLatitude: number;
-  endLongitude: number;
-  path: [number, number][] | null;
-}
-
-interface IRouteStartedEvent {
-  truckId: number;
-  routeId: number;
-  routeName: string;
-  startedAt: string;
-  segments: IDriverRouteSegment[];
-}
-
-interface ITruckPositionEvent {
-  truckId: number;
-  routeId: number;
-  latitude: number;
-  longitude: number;
-  segmentIndex: number | null;
-  streetName: string | null;
-  timestamp: string;
-}
+import {
+  IDriverClientData,
+  IDriverRouteSegment,
+  IRouteStartedEvent,
+  ITruckPositionEvent,
+} from '../interfaces/tracking.interface';
 
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/tracking' })
 export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect {

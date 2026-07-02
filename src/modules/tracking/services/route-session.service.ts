@@ -5,25 +5,12 @@ import { RouteSession } from '../entities/route-session.entity';
 import { Driver } from '../../drivers/entities/driver.entity';
 import { Truck } from '../../trucks/entities/truck.entity';
 import { Route } from '../../routes/entities/route.entity';
+import { IRouteSessionSummary } from '../interfaces/tracking.interface';
 
 /** A session with no GPS activity for longer than this is considered abandoned. */
 const INACTIVITY_LIMIT_MS = 30 * 60 * 1000;
 /** How often the background sweep closes abandoned open sessions. */
 const SWEEP_INTERVAL_MS = 60 * 1000;
-
-export interface IRouteSessionSummary {
-  driverId: number;
-  driverName: string;
-  totalSeconds: number;
-  sessions: Array<{
-    id: number;
-    routeName: string | null;
-    startedAt: string;
-    endedAt: string | null;
-    durationSeconds: number;
-    active: boolean;
-  }>;
-}
 
 @Injectable()
 export class RouteSessionService implements OnModuleInit, OnModuleDestroy {

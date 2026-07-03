@@ -11,6 +11,7 @@ import { TrackingController } from './controllers/tracking.controller';
 import { TrucksModule } from '../trucks/trucks.module';
 import { SchedulesModule } from '../schedules/schedules.module';
 import { ProximityModule } from '../proximity/proximity.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -19,13 +20,14 @@ import { ProximityModule } from '../proximity/proximity.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('app.jwtSecret') ?? 'fallback-secret',
+        secret: config.getOrThrow<string>('app.jwtSecret'),
         signOptions: { expiresIn: config.get<string>('app.jwtExpiresIn') ?? '7d' },
       }),
     }),
     TrucksModule,
     SchedulesModule,
     ProximityModule,
+    AuthModule,
   ],
   controllers: [TrackingController],
   providers: [TrackingGateway, TrackingService, RouteSessionService],

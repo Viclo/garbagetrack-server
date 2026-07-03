@@ -6,16 +6,8 @@ import { Truck } from '../../trucks/entities/truck.entity';
 import { Route } from '../../routes/entities/route.entity';
 import { UpsertScheduleInput } from '../dtos/inputs/upsert-schedule.input';
 import { IWeeklySchedule } from '../interfaces/schedule.interface';
-import { DayOfWeek } from '../../../common/enums/day-of-week.enum';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
-
-const JS_DAY_TO_ENUM: Record<number, DayOfWeek> = {
-  1: DayOfWeek.MON,
-  2: DayOfWeek.TUE,
-  3: DayOfWeek.WED,
-  4: DayOfWeek.THU,
-  5: DayOfWeek.FRI,
-};
+import { localDayOfWeek } from '../../../common/utils/local-time.util';
 
 @Injectable()
 export class SchedulesService {
@@ -69,8 +61,7 @@ export class SchedulesService {
   }
 
   async findForToday(truckId: number): Promise<WeeklySchedule | null> {
-    const dayIndex = new Date().getDay();
-    const dayOfWeek = JS_DAY_TO_ENUM[dayIndex];
+    const dayOfWeek = localDayOfWeek();
     if (!dayOfWeek) return null;
 
     return this.schedulesRepo.findOne({

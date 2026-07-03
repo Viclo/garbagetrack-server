@@ -29,6 +29,9 @@ export class Resident {
   @Column({ name: 'phone_number' })
   phoneNumber!: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  name!: string | null;
+
   @Column({ type: 'double precision' })
   latitude!: number;
 

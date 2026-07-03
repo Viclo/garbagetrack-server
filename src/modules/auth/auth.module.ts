@@ -18,7 +18,7 @@ import { DriversModule } from '../drivers/drivers.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('app.jwtSecret') ?? 'fallback-secret',
+        secret: config.getOrThrow<string>('app.jwtSecret'),
         signOptions: { expiresIn: config.get<string>('app.jwtExpiresIn') ?? '7d' },
       }),
     }),

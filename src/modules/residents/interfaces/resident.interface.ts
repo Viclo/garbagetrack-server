@@ -7,6 +7,7 @@ export interface INearestSegment {
 export interface IResident {
   id: number;
   phoneNumber: string;
+  name: string | null;
   latitude: number;
   longitude: number;
   routeId: number | null;

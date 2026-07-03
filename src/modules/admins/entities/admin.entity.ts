@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { UserRole } from '../../../common/enums/user-role.enum';
 
 @Entity('admins')
 export class Admin {
@@ -21,7 +22,6 @@ export class Admin {
   @Column({ name: 'tenant_id' })
   tenantId!: number;
 
-  // Usernames stay globally unique so login does not need a tenant selector.
   @Column({ unique: true })
   username!: string;
 
@@ -30,6 +30,9 @@ export class Admin {
 
   @Column()
   name!: string;
+
+  @Column({ type: 'varchar', default: UserRole.ADMIN })
+  role!: UserRole;
 
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;

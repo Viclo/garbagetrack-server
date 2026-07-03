@@ -8,11 +8,13 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { WhatsappWebhookService } from '../services/whatsapp-webhook.service';
+import { WebhookSignatureGuard } from '../guards/webhook-signature.guard';
 import { Public } from '../../../common/decorators/public.decorator';
 import { IWhatsAppWebhookPayload } from '../interfaces/whatsapp-message.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
@@ -51,6 +53,7 @@ export class WhatsappWebhookController {
 
   @Public()
   @Post()
+  @UseGuards(WebhookSignatureGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Receive incoming WhatsApp messages from Meta' })
   async receiveMessage(@Body() payload: IWhatsAppWebhookPayload): Promise<string> {

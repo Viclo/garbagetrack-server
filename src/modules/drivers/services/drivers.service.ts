@@ -55,6 +55,14 @@ export class DriversService {
     return this.driversRepository.findOne({ where: { username } });
   }
 
+  /**
+   * Unscoped: used by per-request token re-validation, which runs BEFORE the
+   * tenant context is opened. Never expose through a controller.
+   */
+  async findByIdForAuth(id: number): Promise<Driver | null> {
+    return this.driversRepository.findOne({ where: { id } });
+  }
+
   async update(id: number, input: UpdateDriverInput): Promise<IDriver> {
     const driver = await this.driversRepository.findOne({
       where: { id, tenantId: this.tenantContext.tenantId },

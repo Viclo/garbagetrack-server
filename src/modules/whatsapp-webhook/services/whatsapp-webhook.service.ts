@@ -20,7 +20,11 @@ export class WhatsappWebhookService {
     private readonly whatsAppApiService: WhatsAppApiService,
   ) {}
 
-  async handleIncomingMessage(message: IWhatsAppMessage, contactName: string): Promise<void> {
+  /** `contactName` is the WhatsApp profile name from the webhook payload; null when absent. */
+  async handleIncomingMessage(
+    message: IWhatsAppMessage,
+    contactName: string | null,
+  ): Promise<void> {
     const phoneNumber = message.from;
     this.cleanExpiredPending();
 
@@ -57,13 +61,20 @@ export class WhatsappWebhookService {
   private async handleLocationMessage(
     message: IWhatsAppLocationMessage,
     phoneNumber: string,
-    contactName: string,
+    contactName: string | null,
   ): Promise<void> {
     const { latitude, longitude } = message.location;
+    const displayName = contactName ?? 'Vecino/a';
     this.logger.log(`Location received from ${phoneNumber}: ${latitude}, ${longitude}`);
 
     try {
-      const resident = await this.residentsService.create(phoneNumber, latitude, longitude);
+      // Store the real profile name (null stays null — never the display fallback).
+      const resident = await this.residentsService.create(
+        phoneNumber,
+        latitude,
+        longitude,
+        contactName,
+      );
       this.pendingRegistrations.delete(phoneNumber);
 
       if (!resident.route) {
@@ -73,14 +84,14 @@ export class WhatsappWebhookService {
         );
         await this.whatsAppApiService.sendTextMessage(
           phoneNumber,
-          `📍 Recibimos y guardamos tu ubicación, ${contactName}. Por ahora no hay una ruta de recolección activa en tu zona; te avisaremos en cuanto esté disponible. 🗑️`,
+          `📍 Recibimos y guardamos tu ubicación, ${displayName}. Por ahora no hay una ruta de recolección activa en tu zona; te avisaremos en cuanto esté disponible. 🗑️`,
         );
         return;
       }
 
       await this.whatsAppApiService.sendTextMessage(
         phoneNumber,
-        `✅ ¡Registro exitoso, ${contactName}!\n\nRecibirás una alerta cuando el camión basurero esté cerca de tu dirección. 🗑️\n\nEnvía *SALIR* en cualquier momento para cancelar las alertas.`,
+        `✅ ¡Registro exitoso, ${displayName}!\n\nRecibirás una alerta cuando el camión basurero esté cerca de tu dirección. 🗑️\n\nEnvía *SALIR* en cualquier momento para cancelar las alertas.`,
       );
       this.logger.log(`Resident registered: ${phoneNumber} (${latitude}, ${longitude})`);
     } catch (error) {
@@ -99,14 +110,15 @@ export class WhatsappWebhookService {
   private async handleTextMessage(
     _message: IWhatsAppTextMessage,
     phoneNumber: string,
-    contactName: string,
+    contactName: string | null,
   ): Promise<void> {
+    const displayName = contactName ?? 'Vecino/a';
     const existing = await this.residentsService.findByPhoneNumber(phoneNumber);
 
     if (existing?.isActive) {
       await this.whatsAppApiService.sendTextMessage(
         phoneNumber,
-        `✅ ¡Hola ${contactName}! Ya estás registrado/a.\n\nRecibirás alertas cuando el camión esté cerca de tu dirección.\n\nEnvía *SALIR* para darte de baja.`,
+        `✅ ¡Hola ${displayName}! Ya estás registrado/a.\n\nRecibirás alertas cuando el camión esté cerca de tu dirección.\n\nEnvía *SALIR* para darte de baja.`,
       );
       return;
     }
@@ -114,7 +126,7 @@ export class WhatsappWebhookService {
     this.pendingRegistrations.set(phoneNumber, Date.now());
     await this.whatsAppApiService.sendTextMessage(
       phoneNumber,
-      `¡Hola ${contactName}! 👋\n\nPara recibir alertas del *camión basurero*, por favor *comparte tu ubicación* 📍\n\n` +
+      `¡Hola ${displayName}! 👋\n\nPara recibir alertas del *camión basurero*, por favor *comparte tu ubicación* 📍\n\n` +
         `Toca el clip 📎 → Ubicación → *Enviar mi ubicación actual*\n\n` +
         `Envía *SALIR* en cualquier momento para cancelar.`,
     );

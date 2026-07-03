@@ -14,6 +14,7 @@ import { TrackingService } from '../services/tracking.service';
 import { RouteSessionService } from '../services/route-session.service';
 import { TrucksService } from '../../trucks/services/trucks.service';
 import { SchedulesService } from '../../schedules/services/schedules.service';
+import { AuthService } from '../../auth/services/auth.service';
 import { GpsPositionInput } from '../dtos/inputs/gps-position.input';
 import { IJwtPayload } from '../../../common/interfaces/jwt-payload.interface';
 import { UserRole } from '../../../common/enums/user-role.enum';
@@ -42,6 +43,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly trucksService: TrucksService,
     private readonly schedulesService: SchedulesService,
     private readonly jwtService: JwtService,
+    private readonly authService: AuthService,
     private readonly tenantContext: TenantContextService,
   ) {}
 
@@ -59,17 +61,26 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       const token = rawToken.replace('Bearer ', '');
       const payload = this.jwtService.verify<IJwtPayload>(token);
 
-      // Pre-multi-tenant JWTs have no tenantId; force those clients to re-login
-      // instead of letting them write rows without a tenant.
       if (payload.tenantId == null) {
         this.logger.warn(`Rejecting socket with legacy token (no tenantId): user ${payload.sub}`);
         client.disconnect();
         return;
       }
 
+      // Set BEFORE the first await: messages can be dispatched while this
+      // handler is still awaiting, and every message handler reads client.data.
       client.data = { user: payload } satisfies IDriverClientData;
 
-      if (payload.role === UserRole.ADMIN) {
+      // Same re-validation the HTTP layer does: a deactivated user or a
+      // suspended municipality must not keep streaming through an old token.
+      if (!(await this.authService.verifyActiveUser(payload))) {
+        this.logger.warn(`Rejecting socket for inactive account: user ${payload.sub}`);
+        client.disconnect();
+        return;
+      }
+
+      if (payload.role !== UserRole.DRIVER) {
+        // ADMIN and SUPER_ADMIN dashboards watch their tenant's trucks.
         await client.join(adminRoom(payload.tenantId));
         this.logger.log(`Admin connected: user ${payload.sub} (tenant ${payload.tenantId})`);
       } else {
@@ -143,7 +154,13 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   async handleStartRoute(
     @ConnectedSocket() client: Socket,
   ): Promise<{ event: string; data: IRouteStartedEvent | string }> {
-    const data = client.data as IDriverClientData;
+    const data = client.data as IDriverClientData | undefined;
+
+    // A message can race handleConnection (client.data not populated yet) —
+    // e.g. an emit fired straight from the client's connect callback.
+    if (!data?.user) {
+      return { event: 'error', data: 'Connection not ready yet, please try again' };
+    }
 
     if (data.user.role !== UserRole.DRIVER) {
       return { event: 'error', data: 'Only drivers can start a route' };
@@ -195,7 +212,8 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     @ConnectedSocket() client: Socket,
     @MessageBody() position: GpsPositionInput,
   ): Promise<void> {
-    const data = client.data as IDriverClientData;
+    const data = client.data as IDriverClientData | undefined;
+    if (!data?.user) return;
     const { truckId, routeId, sessionId } = data;
     if (!truckId || !routeId) return;
 
@@ -231,7 +249,8 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @SubscribeMessage('stop-route')
   async handleStopRoute(@ConnectedSocket() client: Socket): Promise<void> {
-    const data = client.data as IDriverClientData;
+    const data = client.data as IDriverClientData | undefined;
+    if (!data?.user) return;
     if (data.truckId) {
       this.server
         .to(adminRoom(data.user.tenantId))

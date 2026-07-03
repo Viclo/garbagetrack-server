@@ -5,6 +5,7 @@ import { NotificationLog } from '../entities/notification-log.entity';
 import { WhatsAppApiService } from './whatsapp-api.service';
 import { Resident } from '../../residents/entities/resident.entity';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
+import { localDateString } from '../../../common/utils/local-time.util';
 
 const ALERT_TEMPLATE_NAME = 'garbage_truck_alert';
 
@@ -24,7 +25,9 @@ export class NotificationsService {
     currentStreetName: string,
     distanceBlocks: number,
   ): Promise<void> {
-    const today = new Date().toISOString().split('T')[0];
+    // Municipality-local date, NOT UTC: the "one alert per day" window must
+    // roll over at local midnight, not at 20:00 La Paz time.
+    const today = localDateString();
     const tenantId = this.tenantContext.tenantId;
 
     const alreadyNotified = await this.logsRepo.findOne({

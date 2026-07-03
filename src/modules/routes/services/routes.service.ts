@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -11,14 +11,18 @@ import { UpdateSegmentInput } from '../dtos/inputs/update-segment.input';
 import { ReplaceSegmentsInput } from '../dtos/inputs/replace-segments.input';
 import { INearestSegmentResult, IRoute, IRouteSegment } from '../interfaces/route.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
+import { ResidentsService } from '../../residents/services/residents.service';
 
 @Injectable()
 export class RoutesService {
+  private readonly logger = new Logger(RoutesService.name);
+
   constructor(
     @InjectRepository(Route) private readonly routesRepo: Repository<Route>,
     @InjectRepository(RouteSegment) private readonly segmentsRepo: Repository<RouteSegment>,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly tenantContext: TenantContextService,
+    private readonly residentsService: ResidentsService,
   ) {}
 
   async create(input: CreateRouteInput): Promise<IRoute> {
@@ -100,6 +104,14 @@ export class RoutesService {
       // save() (not insert) so the @BeforeInsert geom midpoint hook runs.
       await manager.save(segments);
     });
+
+    // The new drawing renumbers segment_index, so every resident assignment on
+    // this route is now stale — re-anchor them (and pick up residents that had
+    // no route yet) with the same nearest-segment logic used at registration.
+    const reassigned = await this.residentsService.reassignByRoute(routeId);
+    if (reassigned > 0) {
+      this.logger.log(`Route ${routeId} segments replaced: re-anchored ${reassigned} resident(s)`);
+    }
 
     return this.findOne(routeId);
   }

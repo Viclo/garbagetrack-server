@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Patch,
   Param,
   Delete,
   ParseIntPipe,
@@ -41,6 +42,14 @@ export class ResidentsController {
   @ApiOperation({ summary: 'Get a resident by ID' })
   findOne(@Param('id', ParseIntPipe) id: number): Promise<IResident> {
     return this.residentsService.findOne(id);
+  }
+
+  @Patch(':id/deactivate')
+  @ApiOperation({
+    summary: 'Deactivate a resident (stops notifications; they can re-register via WhatsApp)',
+  })
+  deactivate(@Param('id', ParseIntPipe) id: number): Promise<IResident> {
+    return this.residentsService.deactivateById(id);
   }
 
   @Delete(':id')

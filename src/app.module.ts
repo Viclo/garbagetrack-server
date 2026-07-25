@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
 import { geminiConfig } from './config/gemini.config';
+import { webpushConfig } from './config/webpush.config';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdminsModule } from './modules/admins/admins.module';
@@ -18,12 +19,13 @@ import { ProximityModule } from './modules/proximity/proximity.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
+import { PushModule } from './modules/push/push.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, geminiConfig],
+      load: [appConfig, databaseConfig, geminiConfig, webpushConfig],
       envFilePath: ['.env.local', '.env'],
     }),
     TypeOrmModule.forRootAsync({
@@ -59,6 +61,7 @@ import { AssistantModule } from './modules/assistant/assistant.module';
     NotificationsModule,
     SystemConfigModule,
     AssistantModule,
+    PushModule,
   ],
   controllers: [AppController],
 })

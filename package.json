@@ -30,6 +30,7 @@
     "migration:create": "typeorm-ts-node-commonjs migration:create"
   },
   "dependencies": {
+    "@google/genai": "^2.12.0",
     "@nestjs/axios": "^3.0.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.0.0",

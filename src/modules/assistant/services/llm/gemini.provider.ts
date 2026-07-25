@@ -13,7 +13,6 @@ export class GeminiProvider implements ILlmClient {
   private readonly client: GoogleGenAI | null;
   private readonly model: string;
   private readonly maxOutputTokens: number;
-  private readonly thinkingBudget: number;
   private readonly thinkingLevel: string;
 
   constructor(config: ConfigService) {
@@ -26,7 +25,6 @@ export class GeminiProvider implements ILlmClient {
       : null;
     this.model = config.get<string>('gemini.model') ?? 'gemini-3.6-flash';
     this.maxOutputTokens = config.get<number>('gemini.maxOutputTokens') ?? 1024;
-    this.thinkingBudget = config.get<number>('gemini.thinkingBudget') ?? 0;
     this.thinkingLevel = config.get<string>('gemini.thinkingLevel') ?? 'low';
     if (!this.client) {
       this.logger.warn('GEMINI_API_KEY not set — assistant endpoints will respond 503');
@@ -38,12 +36,6 @@ export class GeminiProvider implements ILlmClient {
       throw new ServiceUnavailableException('El asistente de IA no está configurado');
     }
 
-    // Gemini 3 rejects `thinkingBudget` (INVALID_ARGUMENT) and cannot disable
-    // thinking; it uses `thinkingLevel` instead. Gemini 2.5 uses the budget.
-    const thinkingConfig = /^gemini-3/.test(this.model)
-      ? { thinkingLevel: this.thinkingLevel as ThinkingLevel }
-      : { thinkingBudget: this.thinkingBudget };
-
     const stream = await this.client.models.generateContentStream({
       model: this.model,
       contents: params.messages.map((message) => ({
@@ -53,7 +45,8 @@ export class GeminiProvider implements ILlmClient {
       config: {
         systemInstruction: params.system,
         maxOutputTokens: this.maxOutputTokens,
-        thinkingConfig,
+        // Gemini 3 cannot disable thinking; "low" is the cheapest level.
+        thinkingConfig: { thinkingLevel: this.thinkingLevel as ThinkingLevel },
       },
     });
 

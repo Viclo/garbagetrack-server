@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class ResidentOutput {
   @ApiProperty() id!: number;
   @ApiProperty() phoneNumber!: string;
-  @ApiPropertyOptional({ description: 'WhatsApp profile name captured at registration' })
+  @ApiPropertyOptional({ description: 'Resident name captured at registration' })
   name!: string | null;
   @ApiProperty() latitude!: number;
   @ApiProperty() longitude!: number;

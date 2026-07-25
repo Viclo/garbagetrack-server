@@ -26,7 +26,7 @@ export class ResidentsController {
 
   @Get()
   @ApiOperation({
-    summary: 'List all registered residents (read-only — registration is via WhatsApp)',
+    summary: 'List all registered residents (read-only — residents self-register from the app)',
   })
   findAll(): Promise<IResident[]> {
     return this.residentsService.findAll();
@@ -46,7 +46,7 @@ export class ResidentsController {
 
   @Patch(':id/deactivate')
   @ApiOperation({
-    summary: 'Deactivate a resident (stops notifications; they can re-register via WhatsApp)',
+    summary: 'Deactivate a resident (stops notifications; they can re-register from the app)',
   })
   deactivate(@Param('id', ParseIntPipe) id: number): Promise<IResident> {
     return this.residentsService.deactivateById(id);

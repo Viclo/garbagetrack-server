@@ -2,12 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NotificationLog } from '../entities/notification-log.entity';
-import { WhatsAppApiService } from './whatsapp-api.service';
 import { Resident } from '../../residents/entities/resident.entity';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 import { localDateString } from '../../../common/utils/local-time.util';
-
-const ALERT_TEMPLATE_NAME = 'garbage_truck_alert';
 
 @Injectable()
 export class NotificationsService {
@@ -15,10 +12,17 @@ export class NotificationsService {
 
   constructor(
     @InjectRepository(NotificationLog) private readonly logsRepo: Repository<NotificationLog>,
-    private readonly whatsAppApiService: WhatsAppApiService,
     private readonly tenantContext: TenantContextService,
   ) {}
 
+  /**
+   * Deliver a "truck is near" alert to a resident.
+   *
+   * TRANSPORT PENDING: WhatsApp delivery was removed in the mobile migration.
+   * The Web Push channel replaces it (roadmap A1–A3). Until then this records
+   * the alert (preserving the one-per-day dedup so the future push channel
+   * won't double-notify) and logs the intent — it does not yet send anything.
+   */
   async sendProximityAlert(
     resident: Resident,
     routeId: number,
@@ -35,25 +39,20 @@ export class NotificationsService {
     });
     if (alreadyNotified) return;
 
-    const result = await this.whatsAppApiService.sendTemplateMessage(
-      resident.phoneNumber,
-      ALERT_TEMPLATE_NAME,
-      [currentStreetName, String(distanceBlocks)],
-    );
-
     await this.logsRepo.save(
       this.logsRepo.create({
         resident,
         route: { id: routeId } as never,
         sentAt: today,
-        messageStatus: result.status,
-        waMessageId: result.messageId || null,
+        messageStatus: 'pending',
+        waMessageId: null,
         tenantId,
       }),
     );
 
     this.logger.log(
-      `Alert sent to ${resident.phoneNumber} — truck on ${currentStreetName} [${result.status}]`,
+      `Proximity alert for ${resident.phoneNumber} — truck on ${currentStreetName} ` +
+        `(${distanceBlocks} block(s) away) [transport pending: push channel not yet implemented]`,
     );
   }
 }

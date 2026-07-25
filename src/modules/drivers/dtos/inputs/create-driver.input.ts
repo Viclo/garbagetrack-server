@@ -18,7 +18,7 @@ export class CreateDriverInput {
   @IsNotEmpty()
   name!: string;
 
-  @ApiPropertyOptional({ example: '+59170000000', description: 'WhatsApp phone number' })
+  @ApiPropertyOptional({ example: '+59170000000', description: 'Contact phone number' })
   @IsOptional()
   @IsString()
   phone?: string;

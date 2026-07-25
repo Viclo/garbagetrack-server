@@ -11,9 +11,7 @@ import { TenantContextInterceptor } from './common/context/tenant-context.interc
 import { TenantContextService } from './common/context/tenant-context.service';
 
 async function bootstrap(): Promise<void> {
-  // rawBody: Meta signs webhook deliveries over the exact received bytes, so
-  // signature verification needs the raw payload, not the re-parsed JSON.
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port') ?? 4000;

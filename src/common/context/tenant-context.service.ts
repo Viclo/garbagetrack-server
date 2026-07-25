@@ -8,7 +8,7 @@ interface ITenantStore {
 /**
  * Request-scoped tenant context backed by AsyncLocalStorage. Populated by
  * TenantContextInterceptor for HTTP requests and explicitly (runWith) by the
- * tracking gateway, the WhatsApp webhook and the seed script.
+ * tracking gateway and the seed script.
  */
 @Injectable()
 export class TenantContextService {

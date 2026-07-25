@@ -19,11 +19,6 @@ export class TenantsService {
     return this.tenantsRepo.findOne({ where: { slug } });
   }
 
-  /** Maps an incoming Meta webhook to a municipality by its business phone_number_id. */
-  async findByWaPhoneNumberId(waPhoneNumberId: string): Promise<Tenant | null> {
-    return this.tenantsRepo.findOne({ where: { waPhoneNumberId } });
-  }
-
   async findAll(): Promise<Tenant[]> {
     return this.tenantsRepo.find({ order: { name: 'ASC' } });
   }
@@ -40,18 +35,8 @@ export class TenantsService {
     const tenant = await this.findById(id);
     if (!tenant) throw new NotFoundException(`Tenant with ID ${id} not found`);
 
-    if (input.waPhoneNumberId) {
-      const owner = await this.findByWaPhoneNumberId(input.waPhoneNumberId);
-      if (owner && owner.id !== id)
-        throw new ConflictException(
-          `WhatsApp number ${input.waPhoneNumberId} already belongs to tenant "${owner.slug}"`,
-        );
-    }
-
     if (input.name !== undefined) tenant.name = input.name;
     if (input.isActive !== undefined) tenant.isActive = input.isActive;
-    if (input.waPhoneNumberId !== undefined) tenant.waPhoneNumberId = input.waPhoneNumberId;
-    if (input.waAccessToken !== undefined) tenant.waAccessToken = input.waAccessToken;
 
     return this.tenantsRepo.save(tenant);
   }

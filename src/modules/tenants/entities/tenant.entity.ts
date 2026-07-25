@@ -22,16 +22,6 @@ export class Tenant {
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 
-  /**
-   * Meta WhatsApp Business credentials for this municipality. When null the
-   * platform falls back to the WHATSAPP_* env credentials (single-tenant mode).
-   */
-  @Column({ name: 'wa_phone_number_id', type: 'varchar', nullable: true, unique: true })
-  waPhoneNumberId!: string | null;
-
-  @Column({ name: 'wa_access_token', type: 'varchar', nullable: true })
-  waAccessToken!: string | null;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

@@ -4,7 +4,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
-import { whatsappConfig } from './config/whatsapp.config';
 import { geminiConfig } from './config/gemini.config';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -17,7 +16,6 @@ import { ResidentsModule } from './modules/residents/residents.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
 import { ProximityModule } from './modules/proximity/proximity.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
-import { WhatsappWebhookModule } from './modules/whatsapp-webhook/whatsapp-webhook.module';
 import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
 
@@ -25,7 +23,7 @@ import { AssistantModule } from './modules/assistant/assistant.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, whatsappConfig, geminiConfig],
+      load: [appConfig, databaseConfig, geminiConfig],
       envFilePath: ['.env.local', '.env'],
     }),
     TypeOrmModule.forRootAsync({
@@ -59,7 +57,6 @@ import { AssistantModule } from './modules/assistant/assistant.module';
     TrackingModule,
     ProximityModule,
     NotificationsModule,
-    WhatsappWebhookModule,
     SystemConfigModule,
     AssistantModule,
   ],

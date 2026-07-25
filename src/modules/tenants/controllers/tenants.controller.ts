@@ -64,7 +64,7 @@ export class TenantsController {
 
   @Patch(':id')
   @ApiOperation({
-    summary: 'Update a municipality (name, activation, WhatsApp credentials — token is write-only)',
+    summary: 'Update a municipality (name, activation)',
   })
   async update(
     @Param('id', ParseIntPipe) id: number,

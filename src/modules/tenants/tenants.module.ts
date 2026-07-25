@@ -7,8 +7,8 @@ import { TenantContextService } from '../../common/context/tenant-context.servic
 import { AdminsModule } from '../admins/admins.module';
 
 /**
- * Global: nearly every module needs the tenant context, and the webhook and
- * WhatsApp API need tenant lookups — avoids importing this in each module.
+ * Global: nearly every module needs the tenant context and tenant lookups —
+ * avoids importing this in each module.
  */
 @Global()
 @Module({

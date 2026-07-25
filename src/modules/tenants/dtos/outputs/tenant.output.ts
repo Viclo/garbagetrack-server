@@ -6,8 +6,6 @@ export class TenantOutput {
   @ApiProperty() slug!: string;
   @ApiProperty() name!: string;
   @ApiProperty() isActive!: boolean;
-  @ApiProperty({ nullable: true }) waPhoneNumberId!: string | null;
-  @ApiProperty() hasWaCredentials!: boolean;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
 
@@ -17,8 +15,6 @@ export class TenantOutput {
       slug: tenant.slug,
       name: tenant.name,
       isActive: tenant.isActive,
-      waPhoneNumberId: tenant.waPhoneNumberId,
-      hasWaCredentials: Boolean(tenant.waPhoneNumberId && tenant.waAccessToken),
       createdAt: tenant.createdAt,
       updatedAt: tenant.updatedAt,
     };

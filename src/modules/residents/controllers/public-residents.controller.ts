@@ -1,10 +1,20 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Body,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  ForbiddenException,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiHeader } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../../../common/decorators/public.decorator';
 import { ResidentRegistrationService } from '../services/resident-registration.service';
 import { RegisterResidentInput } from '../dtos/inputs/register-resident.input';
 import { RegisterResidentOutput } from '../dtos/outputs/register-resident.output';
+import { UnsubscribeResidentInput } from '../dtos/inputs/unsubscribe-resident.input';
 
 /**
  * Public resident endpoints for the PWA (no JWT). Tenant is resolved from the
@@ -29,5 +39,22 @@ export class PublicResidentsController {
   @ApiOperation({ summary: 'Register a resident from the PWA (share-once + push subscription)' })
   register(@Body() input: RegisterResidentInput): Promise<RegisterResidentOutput> {
     return this.registrationService.register(input);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('unsubscribe')
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader({ name: 'x-owner-token', required: true, description: 'Device owner token' })
+  @ApiOperation({ summary: 'Unsubscribe a resident (owner-token gated)' })
+  async unsubscribe(
+    @Body() input: UnsubscribeResidentInput,
+    @Headers('x-owner-token') ownerToken?: string,
+  ): Promise<{ success: true }> {
+    if (!ownerToken) {
+      throw new ForbiddenException('Falta el token de propietario');
+    }
+    await this.registrationService.unregister(input, ownerToken);
+    return { success: true };
   }
 }

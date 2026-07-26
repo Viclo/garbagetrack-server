@@ -1,11 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ResidentsService } from './residents.service';
 import { PushSubscriptionsService } from '../../push/services/push-subscriptions.service';
 import { TenantsService } from '../../tenants/services/tenants.service';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 import { RegisterResidentInput } from '../dtos/inputs/register-resident.input';
 import { RegisterResidentOutput } from '../dtos/outputs/register-resident.output';
-import { UnsubscribeResidentInput } from '../dtos/inputs/unsubscribe-resident.input';
 
 /**
  * Orchestrates the public resident registration (roadmap B1): resolve the
@@ -48,31 +47,6 @@ export class ResidentRegistrationService {
       });
 
       return { residentId: resident.id, ownerToken };
-    });
-  }
-
-  /**
-   * Self-service unsubscribe (roadmap B3). Authorized ONLY by the device's
-   * owner token (Option A) — knowing a resident id is never enough. Deactivates
-   * the resident and all their push subscriptions.
-   */
-  async unregister(input: UnsubscribeResidentInput, ownerToken: string): Promise<void> {
-    const tenant = await this.tenantsService.findBySlug(input.tenantSlug);
-    if (!tenant || !tenant.isActive) {
-      throw new NotFoundException('Municipio no encontrado o no está activo');
-    }
-
-    await this.tenantContext.runWith(tenant.id, async () => {
-      const authorized = await this.residentsService.verifyOwnerToken(
-        input.residentId,
-        ownerToken,
-      );
-      if (!authorized) {
-        throw new ForbiddenException('No autorizado para dar de baja este registro');
-      }
-
-      await this.residentsService.deactivateById(input.residentId);
-      await this.pushSubscriptionsService.deactivateByResident(input.residentId);
     });
   }
 }

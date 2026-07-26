@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import webpush, { WebPushError } from 'web-push';
+// web-push is CommonJS and the project does not set esModuleInterop, so a
+// default import resolves to `.default` (undefined) at runtime — use namespace.
+import * as webpush from 'web-push';
 import {
   IPushPayload,
   IPushSendResult,
@@ -44,7 +46,7 @@ export class WebPushService {
       );
       return { status: 'sent', statusCode: 201 };
     } catch (error) {
-      const statusCode = error instanceof WebPushError ? error.statusCode : null;
+      const statusCode = error instanceof webpush.WebPushError ? error.statusCode : null;
       // 404/410 = subscription no longer exists; the caller prunes it (A4).
       this.logger.error(
         `Web Push send failed (endpoint ${subscription.endpoint.slice(0, 40)}…) — ` +

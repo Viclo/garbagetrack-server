@@ -19,9 +19,12 @@ const WEEKDAY_TO_ENUM: Record<string, DayOfWeek> = {
   Wed: DayOfWeek.WED,
   Thu: DayOfWeek.THU,
   Fri: DayOfWeek.FRI,
+  Sat: DayOfWeek.SAT,
+  Sun: DayOfWeek.SUN,
 };
 
-/** Day of week in the operational timezone; null on weekends (no enum value yet). */
+/** Day of week in the operational timezone. Covers all 7 days; null only as a
+ *  defensive fallback if the locale ever yields an unexpected weekday string. */
 export function localDayOfWeek(now: Date = new Date()): DayOfWeek | null {
   const weekday = new Intl.DateTimeFormat('en-US', {
     timeZone: OPERATIONAL_TIMEZONE,

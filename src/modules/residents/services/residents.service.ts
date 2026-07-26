@@ -4,6 +4,11 @@ import { Repository, DataSource } from 'typeorm';
 import { Resident } from '../entities/resident.entity';
 import { INearestSegment, IResident } from '../interfaces/resident.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
+import {
+  generateOwnerToken,
+  hashOwnerToken,
+  verifyOwnerToken as verifyTokenHash,
+} from '../../../common/utils/owner-token.util';
 
 @Injectable()
 export class ResidentsService {
@@ -12,6 +17,34 @@ export class ResidentsService {
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly tenantContext: TenantContextService,
   ) {}
+
+  /**
+   * Mint a fresh owner token for a resident, persist its hash, and return the
+   * raw token to hand back to the registering device exactly once (B1). Issuing
+   * a new one rotates any previous token.
+   */
+  async issueOwnerToken(residentId: number): Promise<string> {
+    const rawToken = generateOwnerToken();
+    await this.residentsRepo.update(
+      { id: residentId, tenantId: this.tenantContext.tenantId },
+      { ownerToken: hashOwnerToken(rawToken) },
+    );
+    return rawToken;
+  }
+
+  /**
+   * Authorize a resident self-service write: true only when the presented raw
+   * token matches the stored hash for this resident in this tenant. The hash
+   * column is `select: false`, so it is fetched explicitly here.
+   */
+  async verifyOwnerToken(residentId: number, rawToken: string): Promise<boolean> {
+    const resident = await this.residentsRepo.findOne({
+      where: { id: residentId, tenantId: this.tenantContext.tenantId },
+      select: { id: true, ownerToken: true },
+    });
+    if (!resident?.ownerToken) return false;
+    return verifyTokenHash(rawToken, resident.ownerToken);
+  }
 
   async create(
     phoneNumber: string,

@@ -51,6 +51,15 @@ export class Resident {
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 
+  /**
+   * SHA-256 hash of the resident's owner token (Option A). Authorizes
+   * self-service writes (unsubscribe now, edits later). `select: false` keeps
+   * it out of normal reads — verification queries opt in explicitly. Null for
+   * rows created before this existed or by an admin.
+   */
+  @Column({ name: 'owner_token', type: 'varchar', nullable: true, select: false })
+  ownerToken!: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

@@ -46,7 +46,13 @@ export class ResidentsService {
     return verifyTokenHash(rawToken, resident.ownerToken);
   }
 
-  async create(
+  /**
+   * Register a NEW resident record (Option A: device-owned). Always inserts —
+   * it never upserts by phone, because the phone is a label, not an identity,
+   * and matching-by-phone would let a public caller overwrite a stranger's
+   * record. Assigns the nearest active route segment via PostGIS KNN.
+   */
+  async register(
     phoneNumber: string,
     latitude: number,
     longitude: number,
@@ -54,7 +60,6 @@ export class ResidentsService {
   ): Promise<Resident> {
     const tenantId = this.tenantContext.tenantId;
 
-    // Find nearest active route segment of THIS tenant using PostGIS KNN operator
     const [nearest] = await this.dataSource.query<INearestSegment[]>(
       `SELECT rs.route_id   AS "routeId",
               rs.segment_index AS "segmentIndex",
@@ -67,18 +72,6 @@ export class ResidentsService {
        LIMIT 1`,
       [longitude, latitude, tenantId],
     );
-
-    const existing = await this.residentsRepo.findOne({ where: { phoneNumber, tenantId } });
-    if (existing) {
-      existing.latitude = latitude;
-      existing.longitude = longitude;
-      existing.route = nearest ? ({ id: nearest.routeId } as never) : null;
-      existing.segmentIndex = nearest?.segmentIndex ?? null;
-      existing.isActive = true;
-      // Refresh the name on re-registration, but never erase one we already have.
-      if (name) existing.name = name;
-      return this.residentsRepo.save(existing);
-    }
 
     const resident = this.residentsRepo.create({
       phoneNumber,

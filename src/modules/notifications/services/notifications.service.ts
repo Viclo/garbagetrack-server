@@ -62,6 +62,18 @@ export class NotificationsService {
       })),
     );
 
+    // A4: prune subscriptions the push service reports as gone (revoked
+    // permission, cleared data, PWA removed) so we stop sending to them.
+    const dead = results.filter(
+      ({ result }) => result.statusCode === 404 || result.statusCode === 410,
+    );
+    if (dead.length) {
+      await Promise.all(
+        dead.map(({ sub }) => this.pushSubscriptionsService.deactivateByEndpoint(sub.endpoint)),
+      );
+      this.logger.log(`Pruned ${dead.length} dead subscription(s) for resident ${resident.id}`);
+    }
+
     const anySent = results.some(({ result }) => result.status === 'sent');
     const messageStatus = anySent ? 'sent' : 'failed';
 

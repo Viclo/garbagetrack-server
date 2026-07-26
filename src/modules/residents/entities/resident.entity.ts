@@ -8,13 +8,16 @@ import {
   UpdateDateColumn,
   BeforeInsert,
   BeforeUpdate,
-  Unique,
+  Index,
 } from 'typeorm';
 import { Route } from '../../routes/entities/route.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 
+// Phone is a self-declared label under Option A (not an identity key), so it is
+// intentionally NOT unique — a device owns its record via the owner token. A
+// plain index still supports admin lookup and analytics by phone.
 @Entity('residents')
-@Unique(['tenantId', 'phoneNumber'])
+@Index(['tenantId', 'phoneNumber'])
 export class Resident {
   @PrimaryGeneratedColumn()
   id!: number;

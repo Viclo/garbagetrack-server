@@ -33,11 +33,16 @@ export class NotificationLog {
   @Column({ name: 'sent_at', type: 'date' })
   sentAt!: string;
 
+  /** Delivery channel — 'push' now that WhatsApp is retired. Kept for analytics. */
+  @Column({ default: 'push' })
+  channel!: string;
+
   @Column({ name: 'message_status', default: 'sent' })
   messageStatus!: string;
 
-  @Column({ name: 'wa_message_id', type: 'varchar', nullable: true })
-  waMessageId!: string | null;
+  /** Channel-neutral provider id. Null for Web Push (it returns no message id). */
+  @Column({ name: 'provider_message_id', type: 'varchar', nullable: true })
+  providerMessageId!: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;

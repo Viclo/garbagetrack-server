@@ -30,3 +30,8 @@ export interface IPushSendResult {
    */
   statusCode: number | null;
 }
+
+/** Response of GET /push/vapid-public-key. null when Web Push isn't configured. */
+export interface IVapidPublicKeyResponse {
+  publicKey: string | null;
+}

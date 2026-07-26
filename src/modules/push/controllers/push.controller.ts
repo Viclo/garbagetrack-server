@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Public } from '../../../common/decorators/public.decorator';
+import { IVapidPublicKeyResponse } from '../interfaces/push.interface';
 
 @ApiTags('push')
 @Controller('push')
@@ -15,7 +16,7 @@ export class PushController {
   @Public()
   @Get('vapid-public-key')
   @ApiOperation({ summary: 'Get the VAPID public key for Web Push subscription' })
-  getVapidPublicKey(): { publicKey: string | null } {
+  getVapidPublicKey(): IVapidPublicKeyResponse {
     return { publicKey: this.config.get<string>('webpush.publicKey') ?? null };
   }
 }

@@ -1,5 +1,6 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -11,7 +12,12 @@ import { TenantContextInterceptor } from './common/context/tenant-context.interc
 import { TenantContextService } from './common/context/tenant-context.service';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Behind Railway's proxy the client IP is in X-Forwarded-For; trust the first
+  // hop so per-IP rate limiting (ThrottlerGuard) sees the real caller instead
+  // of lumping everyone under the proxy's IP.
+  app.set('trust proxy', 1);
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port') ?? 4000;

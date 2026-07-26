@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { appConfig } from './config/app.config';
 import { databaseConfig } from './config/database.config';
@@ -28,6 +29,9 @@ import { PushModule } from './modules/push/push.module';
       load: [appConfig, databaseConfig, geminiConfig, webpushConfig],
       envFilePath: ['.env.local', '.env'],
     }),
+    // Default rate-limit window; enforced only where ThrottlerGuard is applied
+    // (the public resident endpoints). 60s window. Per-route @Throttle overrides.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 30 }]),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

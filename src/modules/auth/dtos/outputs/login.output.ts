@@ -8,6 +8,7 @@ class AuthUserOutput {
   @ApiProperty() name!: string;
   @ApiProperty() tenantId!: number;
   @ApiProperty() tenantName!: string;
+  @ApiProperty() tenantSlug!: string;
 }
 
 export class LoginOutput {

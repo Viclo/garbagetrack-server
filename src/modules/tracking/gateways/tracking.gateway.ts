@@ -150,6 +150,16 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
   }
 
+  /** Publishes an HTTP/background GPS update to the same admin room as socket updates. */
+  emitTruckPosition(tenantId: number, event: ITruckPositionEvent): void {
+    this.server?.to(adminRoom(tenantId)).emit('truck-position', event);
+  }
+
+  /** Makes the truck disappear from connected admin maps after an HTTP stop. */
+  emitTruckOffline(tenantId: number, truckId: number): void {
+    this.server?.to(adminRoom(tenantId)).emit('truck-offline', { truckId });
+  }
+
   @SubscribeMessage('start-route')
   async handleStartRoute(
     @ConnectedSocket() client: Socket,

@@ -79,6 +79,6 @@ export class AuthService {
     const tenant = await this.tenantsService.findById(tenantId);
     // A suspended municipality blocks login for all of its users.
     if (!tenant?.isActive) return null;
-    return { id, username, name, role, tenantId, tenantName: tenant.name };
+    return { id, username, name, role, tenantId, tenantName: tenant.name, tenantSlug: tenant.slug };
   }
 }

@@ -7,6 +7,7 @@ export interface IAuthUser {
   name: string;
   tenantId: number;
   tenantName: string;
+  tenantSlug: string;
 }
 
 export interface ILoginResponse {

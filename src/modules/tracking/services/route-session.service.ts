@@ -64,6 +64,7 @@ export class RouteSessionService implements OnModuleInit, OnModuleDestroy {
     const open = await this.sessionsRepo.findOne({
       where: { driver: { id: driverId }, endedAt: IsNull() },
       order: { startedAt: 'DESC' },
+      relations: ['truck', 'route'],
     });
     if (!open) return null;
     if (Date.now() - open.lastActivityAt.getTime() > INACTIVITY_LIMIT_MS) return null;

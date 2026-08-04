@@ -8,6 +8,10 @@ import { TenantContextService } from '../../../common/context/tenant-context.ser
 /** Keys every tenant gets; created lazily the first time a tenant reads its config. */
 const DEFAULTS: Array<{ key: string; value: string }> = [
   { key: 'notification_blocks', value: '1' },
+  // Shown to residents on the public registration page so they know who to call
+  // about a missed pickup or a wrong address. Empty until the admin fills it in,
+  // in which case the page simply omits the line.
+  { key: 'contact_phone', value: '' },
 ];
 
 @Injectable()

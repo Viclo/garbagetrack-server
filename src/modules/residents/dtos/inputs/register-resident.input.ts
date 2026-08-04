@@ -8,8 +8,13 @@ import {
   Max,
   MaxLength,
   ValidateNested,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  BOLIVIAN_MOBILE_E164,
+  BOLIVIAN_MOBILE_MESSAGE,
+} from '../../../../common/utils/phone.util';
 
 class PushSubscriptionInput {
   @ApiProperty({ description: 'PushSubscription.endpoint URL from the browser' })
@@ -36,10 +41,14 @@ export class RegisterResidentInput {
   @MaxLength(64)
   tenantSlug!: string;
 
-  @ApiProperty({ example: '+59170000000' })
+  @ApiProperty({
+    example: '+59170000000',
+    description: 'Bolivian mobile in E.164; the PWA adds +591 so residents type 8 digits',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(30)
+  @Matches(BOLIVIAN_MOBILE_E164, { message: BOLIVIAN_MOBILE_MESSAGE })
   phoneNumber!: string;
 
   @ApiPropertyOptional({ example: 'Juan Pérez' })

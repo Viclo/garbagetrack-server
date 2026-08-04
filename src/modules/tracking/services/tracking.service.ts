@@ -18,6 +18,25 @@ export class TrackingService {
     private readonly tenantContext: TenantContextService,
   ) {}
 
+  /** How far in the past a device clock may be before we stop believing it. */
+  private static readonly MAX_FIX_AGE_MS = 6 * 60 * 60 * 1000;
+  /** Tolerance for a device clock that runs slightly fast. */
+  private static readonly MAX_FIX_SKEW_MS = 60 * 1000;
+
+  /**
+   * Trust the device's own timestamp, but only within reason (D6). A phone with
+   * a wrong clock would otherwise poison every ETA — a fix "from the future"
+   * would make the truck look permanently closer than it is. Anything
+   * implausible falls back to the server clock.
+   */
+  private static toRecordedAt(deviceTimestamp?: number): Date {
+    const now = Date.now();
+    if (!deviceTimestamp || !Number.isFinite(deviceTimestamp)) return new Date(now);
+    if (deviceTimestamp > now + TrackingService.MAX_FIX_SKEW_MS) return new Date(now);
+    if (deviceTimestamp < now - TrackingService.MAX_FIX_AGE_MS) return new Date(now);
+    return new Date(deviceTimestamp);
+  }
+
   async processGpsUpdate(
     truckId: number,
     routeId: number,
@@ -31,6 +50,7 @@ export class TrackingService {
         latitude: position.latitude,
         longitude: position.longitude,
         currentSegmentIndex: nearest?.segmentIndex ?? null,
+        recordedAt: TrackingService.toRecordedAt(position.timestamp),
         tenantId: this.tenantContext.tenantId,
       }),
     );
@@ -63,7 +83,10 @@ export class TrackingService {
               tp.longitude,
               tp.current_segment_index AS "segmentIndex",
               seg.street_name          AS "streetName",
-              tp.timestamp
+              -- Device time, not receive time: a batch of fixes that arrives
+              -- after a signal gap must not make a truck look live at a place
+              -- it left ten minutes ago.
+              COALESCE(tp.recorded_at, tp.timestamp) AS "timestamp"
        FROM truck_positions tp
        -- LATERAL, not a plain join: a truck can carry more than one open
        -- session (two drivers), and this must resolve to exactly one row.
@@ -80,7 +103,7 @@ export class TrackingService {
               ON seg.route_id = session.route_id
              AND seg.segment_index = tp.current_segment_index
        WHERE tp.tenant_id = $1
-       ORDER BY tp.truck_id, tp.timestamp DESC`,
+       ORDER BY tp.truck_id, COALESCE(tp.recorded_at, tp.timestamp) DESC`,
       [this.tenantContext.tenantId],
     );
     return rows;

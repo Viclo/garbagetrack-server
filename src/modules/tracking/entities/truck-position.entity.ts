@@ -34,6 +34,16 @@ export class TruckPosition {
   @Column({ name: 'current_segment_index', nullable: true, type: 'int' })
   currentSegmentIndex!: number | null;
 
+  /** When the server stored the fix. */
   @CreateDateColumn({ name: 'timestamp' })
   timestamp!: Date;
+
+  /**
+   * When the DEVICE took the fix (D6). The driver app batches after a signal
+   * gap, so received time can lag by minutes; every ETA must be computed from
+   * this, or a stale fix promises warning the resident does not have. Falls
+   * back to the received time when the app sends no timestamp.
+   */
+  @Column({ name: 'recorded_at', type: 'timestamptz', nullable: true })
+  recordedAt!: Date | null;
 }

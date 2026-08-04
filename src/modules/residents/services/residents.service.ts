@@ -4,6 +4,7 @@ import { Repository, DataSource } from 'typeorm';
 import { Resident } from '../entities/resident.entity';
 import { INearestSegment, IResident } from '../interfaces/resident.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
+import { UpdateResidentInput } from '../dtos/inputs/update-resident.input';
 import {
   generateOwnerToken,
   hashOwnerToken,
@@ -59,19 +60,7 @@ export class ResidentsService {
     name: string | null = null,
   ): Promise<Resident> {
     const tenantId = this.tenantContext.tenantId;
-
-    const [nearest] = await this.dataSource.query<INearestSegment[]>(
-      `SELECT rs.route_id   AS "routeId",
-              rs.segment_index AS "segmentIndex",
-              rs.street_name   AS "streetName"
-       FROM route_segments rs
-       JOIN routes r ON r.id = rs.route_id
-       WHERE r.is_active = true
-         AND r.tenant_id = $3
-       ORDER BY rs.geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
-       LIMIT 1`,
-      [longitude, latitude, tenantId],
-    );
+    const nearest = await this.findNearestSegment(latitude, longitude);
 
     const resident = this.residentsRepo.create({
       phoneNumber,
@@ -83,6 +72,58 @@ export class ResidentsService {
       tenantId,
     });
     return this.residentsRepo.save(resident);
+  }
+
+  /**
+   * Nearest active route segment to a point (PostGIS KNN), used both when a
+   * resident registers and when an admin moves their pin, so the two paths can
+   * never anchor a resident differently for the same coordinates.
+   */
+  private async findNearestSegment(
+    latitude: number,
+    longitude: number,
+  ): Promise<INearestSegment | undefined> {
+    const [nearest] = await this.dataSource.query<INearestSegment[]>(
+      `SELECT rs.route_id      AS "routeId",
+              rs.segment_index AS "segmentIndex",
+              rs.street_name   AS "streetName"
+       FROM route_segments rs
+       JOIN routes r ON r.id = rs.route_id
+       WHERE r.is_active = true
+         AND r.tenant_id = $3
+       ORDER BY rs.geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
+       LIMIT 1`,
+      [longitude, latitude, this.tenantContext.tenantId],
+    );
+    return nearest;
+  }
+
+  /**
+   * Admin-initiated edit (roadmap B6). The dashboard is the only edit path in
+   * v1 — it is JWT-authenticated and role-guarded, so no owner token is
+   * involved. Moving the pin re-runs nearest-segment assignment, otherwise the
+   * resident would keep receiving alerts for the street they left.
+   */
+  async update(id: number, input: UpdateResidentInput): Promise<IResident> {
+    const resident = await this.residentsRepo.findOne({
+      where: { id, tenantId: this.tenantContext.tenantId },
+      relations: ['route'],
+    });
+    if (!resident) throw new NotFoundException(`Resident with ID ${id} not found`);
+
+    if (input.name !== undefined) resident.name = input.name ?? null;
+
+    if (input.latitude !== undefined && input.longitude !== undefined) {
+      resident.latitude = input.latitude;
+      resident.longitude = input.longitude;
+      const nearest = await this.findNearestSegment(input.latitude, input.longitude);
+      // No active coverage near the new spot: drop the anchor rather than leave
+      // a stale one. reassignByRoute() picks these up when coverage arrives.
+      resident.route = nearest ? ({ id: nearest.routeId } as never) : null;
+      resident.segmentIndex = nearest?.segmentIndex ?? null;
+    }
+
+    return this.toInterface(await this.residentsRepo.save(resident));
   }
 
   async getStats(): Promise<{ total: number }> {

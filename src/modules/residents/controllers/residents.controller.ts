@@ -3,6 +3,7 @@ import {
   Get,
   Patch,
   Param,
+  Body,
   Delete,
   ParseIntPipe,
   UseGuards,
@@ -15,6 +16,7 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { IResident } from '../interfaces/resident.interface';
+import { UpdateResidentInput } from '../dtos/inputs/update-resident.input';
 
 @ApiTags('residents')
 @ApiBearerAuth()
@@ -42,6 +44,17 @@ export class ResidentsController {
   @ApiOperation({ summary: 'Get a resident by ID' })
   findOne(@Param('id', ParseIntPipe) id: number): Promise<IResident> {
     return this.residentsService.findOne(id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary: "Update a resident's name or location (re-anchors their route segment)",
+  })
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() input: UpdateResidentInput,
+  ): Promise<IResident> {
+    return this.residentsService.update(id, input);
   }
 
   @Patch(':id/deactivate')

@@ -71,6 +71,26 @@ export class RoutesService {
     await this.routesRepo.remove(route);
   }
 
+  /**
+   * Rebuilds the route's centerline from its segments, in order (B7). Every
+   * path that mutates segments must call this: a stale centerline would keep
+   * anchoring residents to a road that no longer exists. Routes with no
+   * segments end up with a null centerline, which assignment skips.
+   */
+  async rebuildCenterline(routeId: number): Promise<void> {
+    await this.dataSource.query(
+      `UPDATE routes
+          SET centerline = c.line,
+              centerline_length_m = CASE WHEN c.line IS NULL THEN NULL
+                                         ELSE ST_Length(c.line::geography) END
+         FROM (SELECT ST_MakeLine(line ORDER BY segment_index) AS line
+                 FROM route_segments
+                WHERE route_id = $1 AND line IS NOT NULL) c
+        WHERE routes.id = $1`,
+      [routeId],
+    );
+  }
+
   async addSegment(routeId: number, input: CreateSegmentInput): Promise<IRouteSegment> {
     const route = await this.routesRepo.findOne({
       where: { id: routeId, tenantId: this.tenantContext.tenantId },
@@ -86,7 +106,9 @@ export class RoutesService {
       );
 
     const segment = this.segmentsRepo.create({ ...input, route });
-    return this.segmentsRepo.save(segment);
+    const saved = await this.segmentsRepo.save(segment);
+    await this.rebuildCenterline(routeId);
+    return saved;
   }
 
   async replaceSegments(routeId: number, input: ReplaceSegmentsInput): Promise<IRoute> {
@@ -101,9 +123,13 @@ export class RoutesService {
       const segments = input.segments.map((seg, index) =>
         manager.create(RouteSegment, { ...seg, segmentIndex: index, route }),
       );
-      // save() (not insert) so the @BeforeInsert geom midpoint hook runs.
+      // save() (not insert) so the @BeforeInsert geom/line hooks run.
       await manager.save(segments);
     });
+
+    // The centerline is the chain of those segments, so it has to be rebuilt
+    // before residents are re-anchored against it.
+    await this.rebuildCenterline(routeId);
 
     // The new drawing renumbers segment_index, so every resident assignment on
     // this route is now stale — re-anchor them (and pick up residents that had
@@ -118,13 +144,18 @@ export class RoutesService {
 
   async updateSegment(segmentId: number, input: UpdateSegmentInput): Promise<IRouteSegment> {
     const segment = await this.findSegmentInTenant(segmentId);
+    const routeId = segment.route.id;
     Object.assign(segment, input);
-    return this.segmentsRepo.save(segment);
+    const saved = await this.segmentsRepo.save(segment);
+    await this.rebuildCenterline(routeId);
+    return saved;
   }
 
   async removeSegment(segmentId: number): Promise<void> {
     const segment = await this.findSegmentInTenant(segmentId);
+    const routeId = segment.route.id;
     await this.segmentsRepo.remove(segment);
+    await this.rebuildCenterline(routeId);
   }
 
   async getStats(): Promise<{ total: number }> {
@@ -182,6 +213,8 @@ export class RoutesService {
   private async findSegmentInTenant(segmentId: number): Promise<RouteSegment> {
     const segment = await this.segmentsRepo.findOne({
       where: { id: segmentId, route: { tenantId: this.tenantContext.tenantId } },
+      // The route is needed to rebuild its centerline after the segment changes.
+      relations: ['route'],
     });
     if (!segment) throw new NotFoundException(`Segment with ID ${segmentId} not found`);
     return segment;

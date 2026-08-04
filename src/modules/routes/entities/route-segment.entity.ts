@@ -46,6 +46,15 @@ export class RouteSegment {
   @Column({ type: 'geometry', spatialFeatureType: 'Point', srid: 4326, nullable: true })
   geom!: string | null;
 
+  /**
+   * The segment's real road as a line (B7). Distance to a street must be
+   * measured against the street, not against one representative point of it —
+   * on a 7 km segment the midpoint is nowhere near most of the road.
+   */
+  @Index({ spatial: true })
+  @Column({ type: 'geometry', spatialFeatureType: 'LineString', srid: 4326, nullable: true })
+  line!: string | null;
+
   @BeforeInsert()
   @BeforeUpdate()
   setGeom(): void {
@@ -69,5 +78,17 @@ export class RouteSegment {
       type: 'Point',
       coordinates: [lng, lat],
     };
+
+    // Keep the line in step with the same save, so a redrawn route never leaves
+    // stale geometry behind. Falls back to the straight start→end line when the
+    // segment was drawn without road snapping.
+    const coordinates =
+      this.path && this.path.length > 1
+        ? this.path.map(([pLat, pLng]) => [pLng, pLat])
+        : [
+            [this.startLongitude, this.startLatitude],
+            [this.endLongitude, this.endLatitude],
+          ];
+    (this as unknown as { line: object }).line = { type: 'LineString', coordinates };
   }
 }

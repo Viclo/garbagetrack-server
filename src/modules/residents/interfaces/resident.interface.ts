@@ -1,7 +1,13 @@
-export interface INearestSegment {
+/**
+ * Where a resident meets the truck (B7): the nearest point on a route's
+ * centerline, how far along the route it sits, and how far they walk to it.
+ */
+export interface ICollectionPoint {
   routeId: number;
-  segmentIndex: number;
-  streetName: string;
+  segmentIndex: number | null;
+  streetName: string | null;
+  offsetM: number;
+  distanceM: number;
 }
 
 export interface IResident {
@@ -12,6 +18,8 @@ export interface IResident {
   longitude: number;
   routeId: number | null;
   segmentIndex: number | null;
+  /** Walking distance from the house to the route; null when unassigned (B7). */
+  distanceToRouteM: number | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

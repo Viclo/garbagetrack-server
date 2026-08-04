@@ -51,6 +51,18 @@ export class Resident {
   @Column({ name: 'segment_index', nullable: true, type: 'int' })
   segmentIndex!: number | null;
 
+  /**
+   * The resident's collection point on the route (B7): how far along the route
+   * centerline it sits, and how far the resident walks to reach it. The walk
+   * distance is what the 200 m rule tests — beyond it there is no route at all,
+   * because nobody carries a bag that far.
+   */
+  @Column({ name: 'route_offset_m', type: 'double precision', nullable: true })
+  routeOffsetM!: number | null;
+
+  @Column({ name: 'distance_to_route_m', type: 'double precision', nullable: true })
+  distanceToRouteM!: number | null;
+
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 

@@ -8,6 +8,13 @@ import { TenantContextService } from '../../../common/context/tenant-context.ser
 /** Keys every tenant gets; created lazily the first time a tenant reads its config. */
 const DEFAULTS: Array<{ key: string; value: string }> = [
   { key: 'notification_blocks', value: '1' },
+  // B7/B8. How far a resident may be from the route and still be served: past
+  // this they are told they are outside the collection zone, because nobody
+  // carries a bag further. The lead time is what the alert aims for; the speed
+  // is the bootstrap for estimating it until a route has history.
+  { key: 'max_snap_distance_m', value: '200' },
+  { key: 'notify_lead_minutes', value: '20' },
+  { key: 'avg_truck_speed_kmh', value: '8' },
   // Shown to residents on the public registration page so they know who to call
   // about a missed pickup or a wrong address. Empty until the admin fills it in,
   // in which case the page simply omits the line.
@@ -38,6 +45,12 @@ export class SystemConfigService {
   async getNotificationBlocks(): Promise<number> {
     const value = await this.get('notification_blocks');
     return parseInt(value ?? '1', 10);
+  }
+
+  /** Metres a resident may be from a route and still be assigned to it (B7). */
+  async getMaxSnapDistanceM(): Promise<number> {
+    const parsed = Number(await this.get('max_snap_distance_m'));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 200;
   }
 
   async set(key: string, value: string): Promise<ISystemConfig> {

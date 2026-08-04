@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Resident } from '../entities/resident.entity';
-import { INearestSegment, IResident } from '../interfaces/resident.interface';
+import { ICollectionPoint, IResident } from '../interfaces/resident.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 import { UpdateResidentInput } from '../dtos/inputs/update-resident.input';
 import {
@@ -10,6 +10,7 @@ import {
   hashOwnerToken,
   verifyOwnerToken as verifyTokenHash,
 } from '../../../common/utils/owner-token.util';
+import { SystemConfigService } from '../../system-config/services/system-config.service';
 
 @Injectable()
 export class ResidentsService {
@@ -17,6 +18,7 @@ export class ResidentsService {
     @InjectRepository(Resident) private readonly residentsRepo: Repository<Resident>,
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly tenantContext: TenantContextService,
+    private readonly systemConfigService: SystemConfigService,
   ) {}
 
   /**
@@ -51,7 +53,8 @@ export class ResidentsService {
    * Register a NEW resident record (Option A: device-owned). Always inserts —
    * it never upserts by phone, because the phone is a label, not an identity,
    * and matching-by-phone would let a public caller overwrite a stranger's
-   * record. Assigns the nearest active route segment via PostGIS KNN.
+   * record. Anchors the resident to a collection point on the nearest route,
+   * or to none at all when every route is beyond walking distance (B7).
    */
   async register(
     phoneNumber: string,
@@ -60,42 +63,90 @@ export class ResidentsService {
     name: string | null = null,
   ): Promise<Resident> {
     const tenantId = this.tenantContext.tenantId;
-    const nearest = await this.findNearestSegment(latitude, longitude);
+    const point = await this.findCollectionPoint(latitude, longitude);
 
     const resident = this.residentsRepo.create({
       phoneNumber,
       name,
       latitude,
       longitude,
-      route: nearest ? ({ id: nearest.routeId } as never) : null,
-      segmentIndex: nearest?.segmentIndex ?? null,
       tenantId,
     });
+    // No point means no route within walking distance: the record is kept so
+    // the resident exists for the municipality, but it receives no alerts.
+    this.applyCollectionPoint(resident, point);
     return this.residentsRepo.save(resident);
   }
 
   /**
-   * Nearest active route segment to a point (PostGIS KNN), used both when a
-   * resident registers and when an admin moves their pin, so the two paths can
-   * never anchor a resident differently for the same coordinates.
+   * Where a resident hands their bag over: the nearest point on a route's
+   * centerline, provided it is within walking distance (B7).
+   *
+   * Returns null when the nearest route is further than max_snap_distance_m —
+   * that resident is not served by any route, and saying otherwise would send
+   * them alerts for a truck they can never reach. Distances are geography
+   * (metres) against the real road line, not the old per-segment midpoint,
+   * which on a kilometres-long street was nowhere near most of the road.
    */
-  private async findNearestSegment(
+  private async findCollectionPoint(
     latitude: number,
     longitude: number,
-  ): Promise<INearestSegment | undefined> {
-    const [nearest] = await this.dataSource.query<INearestSegment[]>(
-      `SELECT rs.route_id      AS "routeId",
-              rs.segment_index AS "segmentIndex",
-              rs.street_name   AS "streetName"
-       FROM route_segments rs
-       JOIN routes r ON r.id = rs.route_id
-       WHERE r.is_active = true
-         AND r.tenant_id = $3
-       ORDER BY rs.geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
-       LIMIT 1`,
-      [longitude, latitude, this.tenantContext.tenantId],
+  ): Promise<ICollectionPoint | null> {
+    const tenantId = this.tenantContext.tenantId;
+
+    const [nearestRoute] = await this.dataSource.query<
+      Array<{ routeId: number; distanceM: number; offsetM: number }>
+    >(
+      `SELECT r.id AS "routeId",
+              ST_Distance(pt.g::geography, r.centerline::geography) AS "distanceM",
+              ST_LineLocatePoint(r.centerline, pt.g) * r.centerline_length_m AS "offsetM"
+         FROM routes r,
+              (SELECT ST_SetSRID(ST_MakePoint($1, $2), 4326) AS g) pt
+        WHERE r.tenant_id = $3
+          AND r.is_active = true
+          AND r.centerline IS NOT NULL
+        ORDER BY ST_Distance(pt.g::geography, r.centerline::geography)
+        LIMIT 1`,
+      [longitude, latitude, tenantId],
     );
-    return nearest;
+
+    if (!nearestRoute) return null;
+
+    const maxDistance = await this.systemConfigService.getMaxSnapDistanceM();
+    if (nearestRoute.distanceM > maxDistance) return null;
+
+    // The segment only names the street for the alert ("el camión está en …").
+    // It is matched against the segment's line for the same reason as above.
+    const [segment] = await this.dataSource.query<
+      Array<{ segmentIndex: number; streetName: string }>
+    >(
+      `SELECT rs.segment_index AS "segmentIndex",
+              rs.street_name   AS "streetName"
+         FROM route_segments rs
+        WHERE rs.route_id = $1
+          AND rs.line IS NOT NULL
+        ORDER BY ST_Distance(
+                   ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
+                   rs.line::geography)
+        LIMIT 1`,
+      [nearestRoute.routeId, longitude, latitude],
+    );
+
+    return {
+      routeId: nearestRoute.routeId,
+      segmentIndex: segment?.segmentIndex ?? null,
+      streetName: segment?.streetName ?? null,
+      offsetM: nearestRoute.offsetM,
+      distanceM: nearestRoute.distanceM,
+    };
+  }
+
+  /** Applies a collection point (or the lack of one) to a resident record. */
+  private applyCollectionPoint(resident: Resident, point: ICollectionPoint | null): void {
+    resident.route = point ? ({ id: point.routeId } as never) : null;
+    resident.segmentIndex = point?.segmentIndex ?? null;
+    resident.routeOffsetM = point?.offsetM ?? null;
+    resident.distanceToRouteM = point?.distanceM ?? null;
   }
 
   /**
@@ -116,11 +167,13 @@ export class ResidentsService {
     if (input.latitude !== undefined && input.longitude !== undefined) {
       resident.latitude = input.latitude;
       resident.longitude = input.longitude;
-      const nearest = await this.findNearestSegment(input.latitude, input.longitude);
-      // No active coverage near the new spot: drop the anchor rather than leave
-      // a stale one. reassignByRoute() picks these up when coverage arrives.
-      resident.route = nearest ? ({ id: nearest.routeId } as never) : null;
-      resident.segmentIndex = nearest?.segmentIndex ?? null;
+      // No route within walking distance of the new spot: drop the anchor
+      // rather than leave a stale one. reassignByRoute() picks these up when
+      // coverage arrives.
+      this.applyCollectionPoint(
+        resident,
+        await this.findCollectionPoint(input.latitude, input.longitude),
+      );
     }
 
     return this.toInterface(await this.residentsRepo.save(resident));
@@ -191,41 +244,60 @@ export class ResidentsService {
 
   /**
    * Re-anchors residents after a route's segments changed (the map builder's
-   * "replace all segments" renumbers them, so stored segment_index values go
-   * stale). Re-runs the same nearest-active-segment assignment used at
-   * registration for every resident of the route — plus residents that had no
-   * route at all, so people who registered before coverage existed finally get
-   * picked up. Returns how many residents actually changed assignment.
+   * "replace all segments" renumbers them, so stored values go stale). Covers
+   * residents of this route plus those with no route at all, so people who
+   * registered before coverage existed — or who were beyond the walking limit
+   * until the route grew — finally get picked up.
+   *
+   * Applies exactly the same rule as findCollectionPoint(), including the
+   * distance limit: a redraw that moves the road away from someone must unassign
+   * them, not leave them anchored to a route they can no longer walk to.
+   * Returns how many residents actually changed.
    */
   async reassignByRoute(routeId: number): Promise<number> {
     const tenantId = this.tenantContext.tenantId;
+    const maxDistance = await this.systemConfigService.getMaxSnapDistanceM();
+
     const rows = await this.dataSource.query<Array<{ id: number }>>(
       `UPDATE residents r
-       SET route_id      = sub."routeId",
-           segment_index = sub."segmentIndex"
-       FROM (
-         SELECT res.id AS resident_id,
-                nearest."routeId",
-                nearest."segmentIndex"
-         FROM residents res
-         CROSS JOIN LATERAL (
-           SELECT rs.route_id      AS "routeId",
-                  rs.segment_index AS "segmentIndex"
-           FROM route_segments rs
-           JOIN routes rt ON rt.id = rs.route_id
-           WHERE rt.is_active = true
-             AND rt.tenant_id = $2
-           ORDER BY rs.geom <-> ST_SetSRID(ST_MakePoint(res.longitude, res.latitude), 4326)
-           LIMIT 1
-         ) nearest
-         WHERE res.tenant_id = $2
-           AND (res.route_id = $1 OR res.route_id IS NULL)
-       ) sub
-       WHERE r.id = sub.resident_id
-         AND (r.route_id IS DISTINCT FROM sub."routeId"
-              OR r.segment_index IS DISTINCT FROM sub."segmentIndex")
-       RETURNING r.id`,
-      [routeId, tenantId],
+          SET route_id            = sub.route_id,
+              segment_index       = sub.segment_index,
+              route_offset_m      = sub.offset_m,
+              distance_to_route_m = sub.distance_m
+         FROM (
+           SELECT res.id AS resident_id,
+                  CASE WHEN near.distance_m <= $3 THEN near.route_id END        AS route_id,
+                  CASE WHEN near.distance_m <= $3 THEN seg.segment_index END    AS segment_index,
+                  CASE WHEN near.distance_m <= $3 THEN near.offset_m END        AS offset_m,
+                  CASE WHEN near.distance_m <= $3 THEN near.distance_m END      AS distance_m
+             FROM residents res
+             LEFT JOIN LATERAL (
+               SELECT rt.id AS route_id,
+                      ST_Distance(res.geom::geography, rt.centerline::geography) AS distance_m,
+                      ST_LineLocatePoint(rt.centerline, res.geom) * rt.centerline_length_m AS offset_m
+                 FROM routes rt
+                WHERE rt.tenant_id = $2
+                  AND rt.is_active = true
+                  AND rt.centerline IS NOT NULL
+                ORDER BY ST_Distance(res.geom::geography, rt.centerline::geography)
+                LIMIT 1
+             ) near ON TRUE
+             LEFT JOIN LATERAL (
+               SELECT rs.segment_index
+                 FROM route_segments rs
+                WHERE rs.route_id = near.route_id
+                  AND rs.line IS NOT NULL
+                ORDER BY ST_Distance(res.geom::geography, rs.line::geography)
+                LIMIT 1
+             ) seg ON TRUE
+            WHERE res.tenant_id = $2
+              AND (res.route_id = $1 OR res.route_id IS NULL)
+         ) sub
+        WHERE r.id = sub.resident_id
+          AND (r.route_id IS DISTINCT FROM sub.route_id
+               OR r.segment_index IS DISTINCT FROM sub.segment_index)
+        RETURNING r.id`,
+      [routeId, tenantId, maxDistance],
     );
     return rows.length;
   }
@@ -247,6 +319,7 @@ export class ResidentsService {
       longitude: r.longitude,
       routeId: r.route?.id ?? null,
       segmentIndex: r.segmentIndex,
+      distanceToRouteM: r.distanceToRouteM,
       isActive: r.isActive,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,

@@ -11,10 +11,7 @@ import {
   Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import {
-  BOLIVIAN_MOBILE_E164,
-  BOLIVIAN_MOBILE_MESSAGE,
-} from '../../../../common/utils/phone.util';
+import { BOLIVIAN_MOBILE_E164, BOLIVIAN_MOBILE_MESSAGE } from '../../../../common/utils/phone.util';
 
 class PushSubscriptionInput {
   @ApiProperty({ description: 'PushSubscription.endpoint URL from the browser' })

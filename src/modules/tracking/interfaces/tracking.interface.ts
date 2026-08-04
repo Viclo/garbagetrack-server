@@ -52,6 +52,21 @@ export interface ITruckPositionEvent {
   timestamp: string;
 }
 
+/**
+ * Latest fix per truck for the admin map's initial paint. Mirrors the socket's
+ * ITruckPositionEvent so the client can merge the two without special cases —
+ * route and street are resolved here because truck_positions stores neither.
+ */
+export interface ILatestTruckPosition {
+  truckId: number;
+  routeId: number | null;
+  latitude: number;
+  longitude: number;
+  segmentIndex: number | null;
+  streetName: string | null;
+  timestamp: Date;
+}
+
 export interface IRouteSessionSummary {
   driverId: number;
   driverName: string;

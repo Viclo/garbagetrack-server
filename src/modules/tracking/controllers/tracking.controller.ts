@@ -4,6 +4,7 @@ import { TrackingService } from '../services/tracking.service';
 import { RouteSessionService } from '../services/route-session.service';
 import {
   IDriverRouteSegment,
+  ILatestTruckPosition,
   IRouteSessionSummary,
   IRouteStartedEvent,
   ITruckPositionEvent,
@@ -34,7 +35,7 @@ export class TrackingController {
   @Get('positions')
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get the latest GPS position for each active truck' })
-  getLatestPositions() {
+  getLatestPositions(): Promise<ILatestTruckPosition[]> {
     return this.trackingService.getLatestPositions();
   }
 

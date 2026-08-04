@@ -8,17 +8,37 @@ import { localDateString } from '../../../common/utils/local-time.util';
 import { WebPushService } from '../../push/services/web-push.service';
 import { PushSubscriptionsService } from '../../push/services/push-subscriptions.service';
 import { IPushPayload } from '../../push/interfaces/push.interface';
+import { TenantsService } from '../../tenants/services/tenants.service';
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
+  /** tenantId → slug. Slugs are effectively immutable and this runs per alert. */
+  private readonly slugCache = new Map<number, string>();
 
   constructor(
     @InjectRepository(NotificationLog) private readonly logsRepo: Repository<NotificationLog>,
     private readonly tenantContext: TenantContextService,
     private readonly webPushService: WebPushService,
     private readonly pushSubscriptionsService: PushSubscriptionsService,
+    private readonly tenantsService: TenantsService,
   ) {}
+
+  /**
+   * Where tapping the notification should land. Without this the payload said
+   * "/", which is the admin login — a resident who tapped their own alert got a
+   * staff sign-in form. Falls back to "/" only if the tenant vanished, which
+   * cannot happen for a tenant we are actively notifying for.
+   */
+  private async residentUrl(tenantId: number): Promise<string> {
+    const cached = this.slugCache.get(tenantId);
+    if (cached) return `/r/${cached}`;
+
+    const tenant = await this.tenantsService.findById(tenantId);
+    if (!tenant) return '/';
+    this.slugCache.set(tenantId, tenant.slug);
+    return `/r/${tenant.slug}`;
+  }
 
   /**
    * Deliver a "truck is near" alert to a resident via Web Push, fanning out to
@@ -49,7 +69,7 @@ export class NotificationsService {
     const payload: IPushPayload = {
       title: '🚛 Camión basurero cerca',
       body: `El camión está en ${currentStreetName}, aprox. a ${distanceBlocks} cuadra(s) de tu casa.`,
-      data: { url: '/' },
+      data: { url: await this.residentUrl(tenantId) },
     };
 
     const results = await Promise.all(

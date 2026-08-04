@@ -43,6 +43,12 @@ export class TrackingService {
     position: GpsPositionInput,
   ): Promise<ISegmentMatch | null> {
     const nearest = await this.findNearestSegment(routeId, position.latitude, position.longitude);
+    const recordedAt = TrackingService.toRecordedAt(position.timestamp);
+    const projection = await this.projectOntoRoute(routeId, position.latitude, position.longitude);
+
+    // Read the previous fix BEFORE inserting this one, otherwise the truck is
+    // compared against itself and appears stationary.
+    const previous = projection ? await this.findPreviousProgress(truckId, recordedAt) : null;
 
     await this.positionsRepo.save(
       this.positionsRepo.create({
@@ -50,18 +56,71 @@ export class TrackingService {
         latitude: position.latitude,
         longitude: position.longitude,
         currentSegmentIndex: nearest?.segmentIndex ?? null,
-        recordedAt: TrackingService.toRecordedAt(position.timestamp),
+        recordedAt,
+        routeOffsetM: projection?.offsetM ?? null,
+        offRouteM: projection?.offRouteM ?? null,
         tenantId: this.tenantContext.tenantId,
       }),
     );
 
-    if (nearest) {
+    if (projection) {
       await this.proximityService
-        .evaluate(routeId, nearest.segmentIndex, nearest.streetName)
+        .evaluate({
+          truckId,
+          routeId,
+          offsetM: projection.offsetM,
+          offRouteM: projection.offRouteM,
+          streetName: nearest?.streetName ?? null,
+          recordedAt,
+          previous,
+        })
         .catch((err) => this.logger.error('Proximity evaluation failed', err));
     }
 
     return nearest ?? null;
+  }
+
+  /**
+   * Places the fix on the route's centerline: how far along it the truck is,
+   * and how far from it. Null when the route has no centerline yet (B7), which
+   * simply means no alerts until it is drawn.
+   */
+  private async projectOntoRoute(
+    routeId: number,
+    latitude: number,
+    longitude: number,
+  ): Promise<{ offsetM: number; offRouteM: number } | null> {
+    const [row] = await this.dataSource.query<Array<{ offsetM: number; offRouteM: number }>>(
+      `SELECT ST_LineLocatePoint(r.centerline, pt.g) * r.centerline_length_m AS "offsetM",
+              ST_Distance(pt.g::geography, r.centerline::geography)          AS "offRouteM"
+         FROM routes r,
+              (SELECT ST_SetSRID(ST_MakePoint($2, $3), 4326) AS g) pt
+        WHERE r.id = $1
+          AND r.centerline IS NOT NULL
+          AND r.centerline_length_m > 0`,
+      [routeId, longitude, latitude],
+    );
+    return row ?? null;
+  }
+
+  /** The truck's last on-route fix, which gives the engine direction and pace. */
+  private async findPreviousProgress(
+    truckId: number,
+    before: Date,
+  ): Promise<{ offsetM: number; recordedAt: Date } | null> {
+    const [row] = await this.dataSource.query<Array<{ offsetM: number; recordedAt: Date }>>(
+      `SELECT route_offset_m AS "offsetM",
+              COALESCE(recorded_at, timestamp) AS "recordedAt"
+         FROM truck_positions
+        WHERE truck_id = $1
+          AND tenant_id = $2
+          AND route_offset_m IS NOT NULL
+          AND COALESCE(recorded_at, timestamp) < $3
+        ORDER BY COALESCE(recorded_at, timestamp) DESC
+        LIMIT 1`,
+      [truckId, this.tenantContext.tenantId, before],
+    );
+    return row ?? null;
   }
 
   /**

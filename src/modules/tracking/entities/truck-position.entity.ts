@@ -46,4 +46,16 @@ export class TruckPosition {
    */
   @Column({ name: 'recorded_at', type: 'timestamptz', nullable: true })
   recordedAt!: Date | null;
+
+  /**
+   * The fix projected onto the route's centerline (B8): how far along the route
+   * the truck is, and how far it strayed from it. Computed once at ingest
+   * because the engine reads recent fixes on every update to derive speed and
+   * direction. Null when the route has no centerline yet.
+   */
+  @Column({ name: 'route_offset_m', type: 'double precision', nullable: true })
+  routeOffsetM!: number | null;
+
+  @Column({ name: 'off_route_m', type: 'double precision', nullable: true })
+  offRouteM!: number | null;
 }

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, Between } from 'typeorm';
 import { Resident } from '../entities/resident.entity';
 import { ICollectionPoint, IResident } from '../interfaces/resident.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
@@ -211,13 +211,22 @@ export class ResidentsService {
     });
   }
 
-  async findActiveByRouteAndSegment(routeId: number, segmentIndex: number): Promise<Resident[]> {
+  /**
+   * Active residents whose collection point sits within a stretch of the route
+   * (B8). The engine asks by distance along the route, not by segment number,
+   * because segments vary from a block to several kilometres.
+   */
+  async findActiveByRouteOffsetRange(
+    routeId: number,
+    fromOffsetM: number,
+    toOffsetM: number,
+  ): Promise<Resident[]> {
     return this.residentsRepo.find({
       where: {
         route: { id: routeId },
-        segmentIndex,
         isActive: true,
         tenantId: this.tenantContext.tenantId,
+        routeOffsetM: Between(fromOffsetM, toOffsetM),
       },
     });
   }

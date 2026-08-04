@@ -9,6 +9,8 @@ import { WebPushService } from '../../push/services/web-push.service';
 import { PushSubscriptionsService } from '../../push/services/push-subscriptions.service';
 import { IPushPayload } from '../../push/interfaces/push.interface';
 import { TenantsService } from '../../tenants/services/tenants.service';
+import { AlertStage } from '../../proximity/interfaces/proximity.interface';
+import { IStageAlertInput } from '../interfaces/notification.interface';
 
 @Injectable()
 export class NotificationsService {
@@ -41,25 +43,33 @@ export class NotificationsService {
   }
 
   /**
-   * Deliver a "truck is near" alert to a resident via Web Push, fanning out to
-   * all of their active subscriptions (phone + home browser). Enforces one
-   * alert per resident/route/day. A resident with no active subscription is a
-   * no-op that is NOT logged, so if they register later the same day they can
-   * still be alerted.
+   * Deliver one of the day's two alerts to a resident via Web Push, fanning out
+   * to all of their active subscriptions (phone + home browser).
+   *
+   * Each stage dedups independently per resident/route/day, so the arrival
+   * alert still lands for someone who already got the 20-minute warning — and,
+   * more importantly, for someone who never did because the signal dropped. On
+   * a weekly route silence costs seven days, so a late "está en tu calle" is
+   * always worth sending.
+   *
+   * A resident with no active subscription is a no-op that is NOT logged, so if
+   * they register later the same day they can still be alerted.
    */
-  async sendProximityAlert(
-    resident: Resident,
-    routeId: number,
-    currentStreetName: string,
-    distanceBlocks: number,
-  ): Promise<void> {
-    // Municipality-local date, NOT UTC: the "one alert per day" window must
-    // roll over at local midnight, not at 20:00 La Paz time.
+  async sendStageAlert(input: IStageAlertInput): Promise<void> {
+    const { resident, routeId, stage, streetName, etaMinutes } = input;
+    // Municipality-local date, NOT UTC: the "once per day" window must roll
+    // over at local midnight, not at 20:00 La Paz time.
     const today = localDateString();
     const tenantId = this.tenantContext.tenantId;
 
     const alreadyNotified = await this.logsRepo.findOne({
-      where: { resident: { id: resident.id }, route: { id: routeId }, sentAt: today, tenantId },
+      where: {
+        resident: { id: resident.id },
+        route: { id: routeId },
+        sentAt: today,
+        stage,
+        tenantId,
+      },
     });
     if (alreadyNotified) return;
 
@@ -67,8 +77,7 @@ export class NotificationsService {
     if (!subscriptions.length) return;
 
     const payload: IPushPayload = {
-      title: '🚛 Camión basurero cerca',
-      body: `El camión está en ${currentStreetName}, aprox. a ${distanceBlocks} cuadra(s) de tu casa.`,
+      ...this.buildStageMessage(stage, streetName, etaMinutes),
       data: { url: await this.residentUrl(tenantId) },
     };
 
@@ -102,6 +111,7 @@ export class NotificationsService {
         resident,
         route: { id: routeId } as never,
         sentAt: today,
+        stage,
         channel: 'push',
         messageStatus,
         providerMessageId: null,
@@ -110,8 +120,35 @@ export class NotificationsService {
     );
 
     this.logger.log(
-      `Push alert to resident ${resident.id} — truck on ${currentStreetName} ` +
-        `(${distanceBlocks} block(s)) → ${subscriptions.length} sub(s) [${messageStatus}]`,
+      `Push '${stage}' to resident ${resident.id} — truck on ${streetName ?? 'ruta'}` +
+        `${etaMinutes ? `, ETA ~${etaMinutes} min` : ''} → ` +
+        `${subscriptions.length} sub(s) [${messageStatus}]`,
     );
+  }
+
+  /**
+   * The two messages a resident can get. The first buys them time to bag the
+   * trash and walk out; the second is the horn — it means "now", so it says so
+   * rather than quoting a number of minutes.
+   */
+  private buildStageMessage(
+    stage: AlertStage,
+    streetName: string | null,
+    etaMinutes: number | null,
+  ): { title: string; body: string } {
+    const street = streetName ?? 'tu zona';
+
+    if (stage === 'arriving') {
+      return {
+        title: '🚛 El camión está en tu calle',
+        body: `El camión basurero está pasando por ${street}. Saca tu bolsa ahora.`,
+      };
+    }
+
+    const minutes = etaMinutes ?? 20;
+    return {
+      title: '🚛 El camión se acerca',
+      body: `El camión está en ${street} y llega a tu casa en ~${minutes} minutos. Prepara tu bolsa.`,
+    };
   }
 }

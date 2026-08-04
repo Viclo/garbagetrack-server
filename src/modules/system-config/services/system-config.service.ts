@@ -7,14 +7,15 @@ import { TenantContextService } from '../../../common/context/tenant-context.ser
 
 /** Keys every tenant gets; created lazily the first time a tenant reads its config. */
 const DEFAULTS: Array<{ key: string; value: string }> = [
-  { key: 'notification_blocks', value: '1' },
   // B7/B8. How far a resident may be from the route and still be served: past
-  // this they are told they are outside the collection zone, because nobody
-  // carries a bag further. The lead time is what the alert aims for; the speed
-  // is the bootstrap for estimating it until a route has history.
+  // this they are outside the collection zone, because nobody carries a bag
+  // further. The lead time is what the first alert aims for; the speed is the
+  // bootstrap for estimating it until a truck has moved enough to measure.
+  // Arrival distance is how close counts as "the truck is on your street".
   { key: 'max_snap_distance_m', value: '200' },
   { key: 'notify_lead_minutes', value: '20' },
   { key: 'avg_truck_speed_kmh', value: '8' },
+  { key: 'arrival_distance_m', value: '150' },
   // Shown to residents on the public registration page so they know who to call
   // about a missed pickup or a wrong address. Empty until the admin fills it in,
   // in which case the page simply omits the line.
@@ -42,15 +43,30 @@ export class SystemConfigService {
     return DEFAULTS.find((d) => d.key === key)?.value ?? null;
   }
 
-  async getNotificationBlocks(): Promise<number> {
-    const value = await this.get('notification_blocks');
-    return parseInt(value ?? '1', 10);
-  }
-
   /** Metres a resident may be from a route and still be assigned to it (B7). */
   async getMaxSnapDistanceM(): Promise<number> {
-    const parsed = Number(await this.get('max_snap_distance_m'));
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 200;
+    return this.getPositiveNumber('max_snap_distance_m', 200);
+  }
+
+  /** How much warning the first alert aims to give, in minutes (B8). */
+  async getNotifyLeadMinutes(): Promise<number> {
+    return this.getPositiveNumber('notify_lead_minutes', 20);
+  }
+
+  /** Fallback pace when the truck has not moved enough to measure one (B8). */
+  async getAvgTruckSpeedKmh(): Promise<number> {
+    return this.getPositiveNumber('avg_truck_speed_kmh', 8);
+  }
+
+  /** How close along the route counts as "the truck is on your street" (B8). */
+  async getArrivalDistanceM(): Promise<number> {
+    return this.getPositiveNumber('arrival_distance_m', 150);
+  }
+
+  /** A misconfigured value must not disable alerts, so fall back to the default. */
+  private async getPositiveNumber(key: string, fallback: number): Promise<number> {
+    const parsed = Number(await this.get(key));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
   async set(key: string, value: string): Promise<ISystemConfig> {

@@ -37,6 +37,14 @@ export class NotificationLog {
   @Column({ default: 'push' })
   channel!: string;
 
+  /**
+   * Which of the day's two alerts this was (B8): 'prepare' (~20 minutes out)
+   * or 'arriving' (the truck is at the resident's street). Part of the daily
+   * dedup key, so one stage never suppresses the other.
+   */
+  @Column({ default: 'prepare' })
+  stage!: string;
+
   @Column({ name: 'message_status', default: 'sent' })
   messageStatus!: string;
 

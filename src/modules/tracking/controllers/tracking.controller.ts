@@ -119,7 +119,15 @@ export class TrackingController {
   async stopDriverRoute(@CurrentUser() user: IJwtPayload): Promise<void> {
     const session = await this.routeSessionService.findOpenForDriver(user.sub);
     await this.routeSessionService.stop(user.sub);
-    if (session?.truck) this.trackingGateway.emitTruckOffline(user.tenantId, session.truck.id);
+    // The route id goes with it so the residents watching that route are told
+    // the run is over, not just the admin map (E4).
+    if (session?.truck) {
+      this.trackingGateway.emitTruckOffline(
+        user.tenantId,
+        session.truck.id,
+        session.route?.id ?? null,
+      );
+    }
   }
 
   private mapSegments(schedule: {

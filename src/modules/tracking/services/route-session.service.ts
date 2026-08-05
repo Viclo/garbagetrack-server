@@ -71,6 +71,23 @@ export class RouteSessionService implements OnModuleInit, OnModuleDestroy {
     return open;
   }
 
+  /**
+   * The open session on a route, whichever driver is running it (E4). A
+   * resident watching their street cares that *a* truck is out, not who is
+   * driving it. Same freshness rule as the driver lookup: a session with no
+   * activity for half an hour is not a truck anyone should be waiting for.
+   */
+  async findOpenForRoute(routeId: number): Promise<RouteSession | null> {
+    const open = await this.sessionsRepo.findOne({
+      where: { route: { id: routeId }, tenantId: this.tenantContext.tenantId, endedAt: IsNull() },
+      order: { startedAt: 'DESC' },
+      relations: ['truck', 'route'],
+    });
+    if (!open) return null;
+    if (Date.now() - open.lastActivityAt.getTime() > INACTIVITY_LIMIT_MS) return null;
+    return open;
+  }
+
   /** Marks a session as still active. Best-effort; called on every GPS ping. */
   async recordActivity(sessionId: number): Promise<void> {
     await this.sessionsRepo.update({ id: sessionId }, { lastActivityAt: new Date() });

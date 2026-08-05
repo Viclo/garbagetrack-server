@@ -22,13 +22,30 @@ import { WeeklySchedule } from '../../schedules/entities/weekly-schedule.entity'
 import {
   IDriverClientData,
   IDriverRouteSegment,
+  IResidentClientData,
+  IResidentLivePayload,
   IRouteStartedEvent,
   ITruckPositionEvent,
+  RESIDENT_LIVE_TOKEN,
 } from '../interfaces/tracking.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 
 /** Admin dashboards join per-tenant rooms so a municipality only sees its own trucks. */
 const adminRoom = (tenantId: number): string => `tenant:${tenantId}:admin`;
+
+/**
+ * One room per route (E4). Residents watching their own street join exactly
+ * one of these, which is what keeps them from seeing any route but theirs.
+ */
+const routeRoom = (tenantId: number, routeId: number): string =>
+  `tenant:${tenantId}:route:${routeId}`;
+
+/** Both kinds of token are signed with the same secret; `typ` tells them apart. */
+function isResidentLiveToken(
+  payload: IJwtPayload | IResidentLivePayload,
+): payload is IResidentLivePayload {
+  return (payload as IResidentLivePayload).typ === RESIDENT_LIVE_TOKEN;
+}
 
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/tracking' })
 export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -59,7 +76,14 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
 
       const token = rawToken.replace('Bearer ', '');
-      const payload = this.jwtService.verify<IJwtPayload>(token);
+      const payload = this.jwtService.verify<IJwtPayload | IResidentLivePayload>(token);
+
+      // A watching resident, not a user of the system: read-only, one route,
+      // and none of the driver/admin handling below applies to them.
+      if (isResidentLiveToken(payload)) {
+        await this.joinResident(client, payload);
+        return;
+      }
 
       if (payload.tenantId == null) {
         this.logger.warn(`Rejecting socket with legacy token (no tenantId): user ${payload.sub}`);
@@ -92,6 +116,20 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     } catch {
       client.disconnect();
     }
+  }
+
+  /**
+   * Puts a resident in their route's room and nothing else (E4). `client.data`
+   * is deliberately NOT shaped like a driver's: every message handler starts by
+   * reading `data.user`, so a resident socket falls out of all of them without
+   * needing a role check in each.
+   */
+  private async joinResident(client: Socket, payload: IResidentLivePayload): Promise<void> {
+    client.data = { resident: payload } satisfies IResidentClientData;
+    await client.join(routeRoom(payload.tenantId, payload.routeId));
+    this.logger.log(
+      `Resident ${payload.sub} watching route ${payload.routeId} (tenant ${payload.tenantId})`,
+    );
   }
 
   /**
@@ -153,11 +191,22 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
   /** Publishes an HTTP/background GPS update to the same admin room as socket updates. */
   emitTruckPosition(tenantId: number, event: ITruckPositionEvent): void {
     this.server?.to(adminRoom(tenantId)).emit('truck-position', event);
+    // The same fix reaches the residents of that route (E4). One emit per room
+    // rather than a broadcast: a resident must never receive another route's
+    // truck, and room membership is the guarantee.
+    this.server?.to(routeRoom(tenantId, event.routeId)).emit('truck-position', event);
   }
 
-  /** Makes the truck disappear from connected admin maps after an HTTP stop. */
-  emitTruckOffline(tenantId: number, truckId: number): void {
+  /**
+   * Makes the truck disappear from connected admin maps after an HTTP stop, and
+   * tells the route's residents the run is over — otherwise their map keeps
+   * showing a truck frozen wherever it stopped reporting.
+   */
+  emitTruckOffline(tenantId: number, truckId: number, routeId?: number | null): void {
     this.server?.to(adminRoom(tenantId)).emit('truck-offline', { truckId });
+    if (routeId != null) {
+      this.server?.to(routeRoom(tenantId, routeId)).emit('route-ended', { truckId, routeId });
+    }
   }
 
   @SubscribeMessage('start-route')
@@ -254,6 +303,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       };
 
       this.server.to(adminRoom(data.user.tenantId)).emit('truck-position', event);
+      this.server.to(routeRoom(data.user.tenantId, routeId)).emit('truck-position', event);
     });
   }
 
@@ -265,6 +315,13 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       this.server
         .to(adminRoom(data.user.tenantId))
         .emit('truck-offline', { truckId: data.truckId });
+      if (data.routeId != null) {
+        // Residents watching this route are told the run ended, so their map
+        // stops implying a truck is still on its way.
+        this.server
+          .to(routeRoom(data.user.tenantId, data.routeId))
+          .emit('route-ended', { truckId: data.truckId, routeId: data.routeId });
+      }
       this.logger.log(`Driver ${data.user.sub} stopped route for truck ${data.truckId}`);
     }
     // Explicit stop ends the driving session (a mere disconnect does not, so the

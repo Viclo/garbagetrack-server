@@ -208,22 +208,24 @@ export class ResidentsService {
 
     if (input.name !== undefined) resident.name = input.name ?? null;
 
-    if (input.latitude !== undefined && input.longitude !== undefined) {
-      resident.latitude = input.latitude;
-      resident.longitude = input.longitude;
-      // A new location is new information, so the pin wins over any manual
-      // route: re-run assignment and release the lock. No route within walking
-      // distance means dropping the anchor rather than leaving a stale one —
-      // reassignByRoute() picks these up when coverage arrives.
-      this.applyCollectionPoint(
-        resident,
-        await this.findCollectionPoint(input.latitude, input.longitude),
-      );
-      resident.routeLocked = false;
-    } else if (input.routeId !== undefined) {
-      // Manual assignment (E5). Not bound by the walking limit: the admin may
-      // know the truck serves a house the mapped route does not reach. Locked
-      // either way, so a route redraw cannot quietly undo the decision.
+    const { latitude, longitude } = input;
+    // The dashboard sends the pin on every save, so only a coordinate that
+    // actually differs counts as a move. Treating an unchanged pin as one would
+    // re-run automatic assignment and silently discard the route the admin
+    // picked in the same save.
+    let moved = false;
+    if (latitude !== undefined && longitude !== undefined) {
+      moved = latitude !== resident.latitude || longitude !== resident.longitude;
+      resident.latitude = latitude;
+      resident.longitude = longitude;
+    }
+
+    if (input.routeId !== undefined) {
+      // Manual assignment (E5) wins, even alongside a moved pin: the admin
+      // chose the route with that pin in front of them. Not bound by the
+      // walking limit — the admin may know the truck serves a house the mapped
+      // route does not reach. Locked either way, so a route redraw cannot
+      // quietly undo the decision.
       this.applyCollectionPoint(
         resident,
         input.routeId === null
@@ -231,6 +233,16 @@ export class ResidentsService {
           : await this.pointOnRoute(input.routeId, resident.latitude, resident.longitude),
       );
       resident.routeLocked = true;
+    } else if (moved) {
+      // A new location is new information with no competing instruction, so
+      // re-run assignment and release the lock. No route within walking
+      // distance means dropping the anchor rather than leaving a stale one —
+      // reassignByRoute() picks these up when coverage arrives.
+      this.applyCollectionPoint(
+        resident,
+        await this.findCollectionPoint(resident.latitude, resident.longitude),
+      );
+      resident.routeLocked = false;
     }
 
     await this.residentsRepo.save(resident);

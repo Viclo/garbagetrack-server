@@ -20,6 +20,11 @@ export interface IResident {
   segmentIndex: number | null;
   /** Walking distance from the house to the route; null when unassigned (B7). */
   distanceToRouteM: number | null;
+  /** Route and street names, so the dashboard can show why the pin was assigned (E5). */
+  routeName: string | null;
+  streetName: string | null;
+  /** True when an admin set the route by hand; automatic reassignment skips it. */
+  routeLocked: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

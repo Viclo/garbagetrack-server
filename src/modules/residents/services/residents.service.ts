@@ -116,7 +116,58 @@ export class ResidentsService {
     if (nearestRoute.distanceM > maxDistance) return null;
 
     // The segment only names the street for the alert ("el camión está en …").
-    // It is matched against the segment's line for the same reason as above.
+    const segment = await this.findNearestSegmentOnRoute(nearestRoute.routeId, latitude, longitude);
+
+    return {
+      routeId: nearestRoute.routeId,
+      segmentIndex: segment?.segmentIndex ?? null,
+      streetName: segment?.streetName ?? null,
+      offsetM: nearestRoute.offsetM,
+      distanceM: nearestRoute.distanceM,
+    };
+  }
+
+  /**
+   * The collection point on a SPECIFIC route, however far away it is (E5).
+   * findCollectionPoint() picks the nearest route and enforces the walking
+   * limit; this one obeys the admin instead.
+   */
+  private async pointOnRoute(
+    routeId: number,
+    latitude: number,
+    longitude: number,
+  ): Promise<ICollectionPoint> {
+    const [route] = await this.dataSource.query<Array<{ distanceM: number; offsetM: number }>>(
+      `SELECT ST_Distance(pt.g::geography, r.centerline::geography) AS "distanceM",
+              ST_LineLocatePoint(r.centerline, pt.g) * r.centerline_length_m AS "offsetM"
+         FROM routes r,
+              (SELECT ST_SetSRID(ST_MakePoint($2, $3), 4326) AS g) pt
+        WHERE r.id = $1
+          AND r.tenant_id = $4
+          AND r.centerline IS NOT NULL`,
+      [routeId, longitude, latitude, this.tenantContext.tenantId],
+    );
+    if (!route) {
+      // Either the route is not this tenant's, or it has no drawing yet.
+      throw new NotFoundException(`Route with ID ${routeId} not found or has no path drawn`);
+    }
+
+    const segment = await this.findNearestSegmentOnRoute(routeId, latitude, longitude);
+    return {
+      routeId,
+      segmentIndex: segment?.segmentIndex ?? null,
+      streetName: segment?.streetName ?? null,
+      offsetM: route.offsetM,
+      distanceM: route.distanceM,
+    };
+  }
+
+  /** Nearest segment of one route, by distance to its road line — names the street. */
+  private async findNearestSegmentOnRoute(
+    routeId: number,
+    latitude: number,
+    longitude: number,
+  ): Promise<{ segmentIndex: number; streetName: string } | undefined> {
     const [segment] = await this.dataSource.query<
       Array<{ segmentIndex: number; streetName: string }>
     >(
@@ -129,16 +180,9 @@ export class ResidentsService {
                    ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
                    rs.line::geography)
         LIMIT 1`,
-      [nearestRoute.routeId, longitude, latitude],
+      [routeId, longitude, latitude],
     );
-
-    return {
-      routeId: nearestRoute.routeId,
-      segmentIndex: segment?.segmentIndex ?? null,
-      streetName: segment?.streetName ?? null,
-      offsetM: nearestRoute.offsetM,
-      distanceM: nearestRoute.distanceM,
-    };
+    return segment;
   }
 
   /** Applies a collection point (or the lack of one) to a resident record. */
@@ -167,16 +211,52 @@ export class ResidentsService {
     if (input.latitude !== undefined && input.longitude !== undefined) {
       resident.latitude = input.latitude;
       resident.longitude = input.longitude;
-      // No route within walking distance of the new spot: drop the anchor
-      // rather than leave a stale one. reassignByRoute() picks these up when
-      // coverage arrives.
+      // A new location is new information, so the pin wins over any manual
+      // route: re-run assignment and release the lock. No route within walking
+      // distance means dropping the anchor rather than leaving a stale one —
+      // reassignByRoute() picks these up when coverage arrives.
       this.applyCollectionPoint(
         resident,
         await this.findCollectionPoint(input.latitude, input.longitude),
       );
+      resident.routeLocked = false;
+    } else if (input.routeId !== undefined) {
+      // Manual assignment (E5). Not bound by the walking limit: the admin may
+      // know the truck serves a house the mapped route does not reach. Locked
+      // either way, so a route redraw cannot quietly undo the decision.
+      this.applyCollectionPoint(
+        resident,
+        input.routeId === null
+          ? null
+          : await this.pointOnRoute(input.routeId, resident.latitude, resident.longitude),
+      );
+      resident.routeLocked = true;
     }
 
-    return this.toInterface(await this.residentsRepo.save(resident));
+    await this.residentsRepo.save(resident);
+    // Re-read so the response carries the route and street names: the saved
+    // entity holds only a partial route reference.
+    return this.findOne(id);
+  }
+
+  /**
+   * Re-runs automatic assignment and releases the manual lock (E5) — the
+   * "Recalcular asignación" action, and the way back after an override.
+   */
+  async recalculateAssignment(id: number): Promise<IResident> {
+    const resident = await this.residentsRepo.findOne({
+      where: { id, tenantId: this.tenantContext.tenantId },
+      relations: ['route'],
+    });
+    if (!resident) throw new NotFoundException(`Resident with ID ${id} not found`);
+
+    this.applyCollectionPoint(
+      resident,
+      await this.findCollectionPoint(resident.latitude, resident.longitude),
+    );
+    resident.routeLocked = false;
+    await this.residentsRepo.save(resident);
+    return this.findOne(id);
   }
 
   async getStats(): Promise<{ total: number }> {
@@ -192,7 +272,25 @@ export class ResidentsService {
       relations: ['route'],
       order: { createdAt: 'DESC' },
     });
-    return residents.map((r) => this.toInterface(r));
+    // One lookup for every street name, rather than joining segments per
+    // resident: routes carry few segments and the list can be long.
+    const streets = await this.loadStreetNames();
+    return residents.map((r) => this.toInterface(r, streets));
+  }
+
+  /** (routeId, segmentIndex) → street name, for labelling assignments (E5). */
+  private async loadStreetNames(): Promise<Map<string, string>> {
+    const rows = await this.dataSource.query<
+      Array<{ routeId: number; segmentIndex: number; streetName: string }>
+    >(
+      `SELECT rs.route_id AS "routeId", rs.segment_index AS "segmentIndex",
+              rs.street_name AS "streetName"
+         FROM route_segments rs
+         JOIN routes r ON r.id = rs.route_id
+        WHERE r.tenant_id = $1`,
+      [this.tenantContext.tenantId],
+    );
+    return new Map(rows.map((row) => [`${row.routeId}:${row.segmentIndex}`, row.streetName]));
   }
 
   async findOne(id: number): Promise<IResident> {
@@ -201,7 +299,7 @@ export class ResidentsService {
       relations: ['route'],
     });
     if (!resident) throw new NotFoundException(`Resident with ID ${id} not found`);
-    return this.toInterface(resident);
+    return this.toInterface(resident, await this.loadStreetNames());
   }
 
   async findByPhoneNumber(phoneNumber: string): Promise<Resident | null> {
@@ -300,6 +398,7 @@ export class ResidentsService {
                 LIMIT 1
              ) seg ON TRUE
             WHERE res.tenant_id = $2
+              AND res.route_locked = false
               AND (res.route_id = $1 OR res.route_id IS NULL)
          ) sub
         WHERE r.id = sub.resident_id
@@ -319,16 +418,23 @@ export class ResidentsService {
     await this.residentsRepo.remove(resident);
   }
 
-  private toInterface(r: Resident): IResident {
+  private toInterface(r: Resident, streets?: Map<string, string>): IResident {
+    const routeId = r.route?.id ?? null;
     return {
       id: r.id,
       phoneNumber: r.phoneNumber,
       name: r.name,
       latitude: r.latitude,
       longitude: r.longitude,
-      routeId: r.route?.id ?? null,
+      routeId,
       segmentIndex: r.segmentIndex,
       distanceToRouteM: r.distanceToRouteM,
+      routeName: r.route?.name ?? null,
+      streetName:
+        routeId !== null && r.segmentIndex !== null
+          ? (streets?.get(`${routeId}:${r.segmentIndex}`) ?? null)
+          : null,
+      routeLocked: r.routeLocked,
       isActive: r.isActive,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,

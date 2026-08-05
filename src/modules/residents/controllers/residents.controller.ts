@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Body,
@@ -55,6 +56,15 @@ export class ResidentsController {
     @Body() input: UpdateResidentInput,
   ): Promise<IResident> {
     return this.residentsService.update(id, input);
+  }
+
+  @Post(':id/reassign')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Re-run automatic route assignment, releasing any manual override",
+  })
+  reassign(@Param('id', ParseIntPipe) id: number): Promise<IResident> {
+    return this.residentsService.recalculateAssignment(id);
   }
 
   @Patch(':id/deactivate')

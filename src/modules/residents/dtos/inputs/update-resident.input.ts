@@ -1,5 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, Min, Max, MaxLength, ValidateIf } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsInt,
+  Min,
+  Max,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 
 /**
  * Admin-side resident edit (roadmap B6). Residents cannot self-edit in v1, so
@@ -27,4 +36,16 @@ export class UpdateResidentInput {
   @Min(-180)
   @Max(180)
   longitude?: number;
+
+  /**
+   * Assign a route by hand (E5). Null unassigns. Either way the choice is
+   * locked, so redrawing the route will not quietly undo it. Deliberately NOT
+   * bound by max_snap_distance_m: the admin may know the truck serves a house
+   * the mapped route does not reach.
+   */
+  @ApiPropertyOptional({ example: 3, description: 'Null unassigns the resident' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  routeId?: number | null;
 }

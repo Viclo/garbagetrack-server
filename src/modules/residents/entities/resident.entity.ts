@@ -63,6 +63,14 @@ export class Resident {
   @Column({ name: 'distance_to_route_m', type: 'double precision', nullable: true })
   distanceToRouteM!: number | null;
 
+  /**
+   * True when an admin chose this route by hand (E5). Automatic reassignment
+   * skips these, so redrawing a route cannot quietly undo a correction someone
+   * made deliberately.
+   */
+  @Column({ name: 'route_locked', default: false })
+  routeLocked!: boolean;
+
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 

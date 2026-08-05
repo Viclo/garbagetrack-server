@@ -457,6 +457,7 @@ export class ResidentsService {
       routeId,
       segmentIndex: r.segmentIndex,
       distanceToRouteM: r.distanceToRouteM,
+      routeOffsetM: r.routeOffsetM,
       routeName: r.route?.name ?? null,
       streetName:
         routeId !== null && r.segmentIndex !== null

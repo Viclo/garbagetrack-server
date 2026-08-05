@@ -16,6 +16,7 @@ import { ProximityModule } from '../proximity/proximity.module';
 import { AuthModule } from '../auth/auth.module';
 import { ResidentsModule } from '../residents/residents.module';
 import { RoutesModule } from '../routes/routes.module';
+import { SystemConfigModule } from '../system-config/system-config.module';
 
 @Module({
   imports: [
@@ -36,6 +37,9 @@ import { RoutesModule } from '../routes/routes.module';
     // way: residents never import tracking, so there is no cycle.
     ResidentsModule,
     RoutesModule,
+    // The live view quotes the same average speed the alerts use, so the map
+    // and the notification cannot tell the resident two different stories.
+    SystemConfigModule,
   ],
   controllers: [TrackingController, PublicResidentLiveController],
   providers: [TrackingGateway, TrackingService, RouteSessionService, ResidentLiveService],

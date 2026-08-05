@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ResidentsService } from '../../residents/services/residents.service';
 import { RoutesService } from '../../routes/services/routes.service';
 import { TenantsService } from '../../tenants/services/tenants.service';
+import { SystemConfigService } from '../../system-config/services/system-config.service';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 import { RouteSessionService } from './route-session.service';
 import { TrackingService } from './tracking.service';
@@ -39,6 +40,7 @@ export class ResidentLiveService {
     private readonly residentsService: ResidentsService,
     private readonly routesService: RoutesService,
     private readonly tenantsService: TenantsService,
+    private readonly systemConfigService: SystemConfigService,
     private readonly tenantContext: TenantContextService,
     private readonly routeSessionService: RouteSessionService,
     private readonly trackingService: TrackingService,
@@ -90,6 +92,8 @@ export class ResidentLiveService {
         routeName: route.name,
         segments: this.mapSegments(route.segments ?? []),
         home: { latitude: resident.latitude, longitude: resident.longitude },
+        homeOffsetM: resident.routeOffsetM,
+        avgSpeedKmh: await this.systemConfigService.getAvgTruckSpeedKmh(),
         active: session != null,
         startedAt: session?.startedAt.toISOString() ?? null,
         lastPosition:

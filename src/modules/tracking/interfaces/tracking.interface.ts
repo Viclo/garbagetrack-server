@@ -60,6 +60,14 @@ export interface IResidentLiveSession {
   routeName: string;
   segments: IDriverRouteSegment[];
   home: { latitude: number; longitude: number };
+  /**
+   * How far along the route the resident's collection point sits, and the pace
+   * the alerts assume. The page counts down with the same two numbers the
+   * server's own alerts use, so the map and the notification can never tell the
+   * resident two different stories.
+   */
+  homeOffsetM: number | null;
+  avgSpeedKmh: number;
   /** True when a driver has a live session open on this route right now. */
   active: boolean;
   startedAt: string | null;

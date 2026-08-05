@@ -34,12 +34,16 @@ export class NotificationsService {
    */
   private async residentUrl(tenantId: number): Promise<string> {
     const cached = this.slugCache.get(tenantId);
-    if (cached) return `/r/${cached}`;
+    if (cached) return `/r/${cached}/live`;
 
     const tenant = await this.tenantsService.findById(tenantId);
     if (!tenant) return '/';
     this.slugCache.set(tenantId, tenant.slug);
-    return `/r/${tenant.slug}`;
+    // The live map (E4), not the registration page: the alert has just told
+    // them the truck is coming, and "where is it now" is the only question
+    // they open it to answer. The page itself falls back to their status
+    // screen when there is nothing to watch.
+    return `/r/${tenant.slug}/live`;
   }
 
   /**

@@ -314,6 +314,22 @@ export class ResidentsService {
     return this.toInterface(resident, await this.loadStreetNames());
   }
 
+  /**
+   * The two facts a registered device needs about its own record (C7): whether
+   * it still counts as registered, and whether a route can actually reach it.
+   * Null when the record no longer exists.
+   */
+  async findRegistrationState(
+    id: number,
+  ): Promise<{ isActive: boolean; routeAssigned: boolean } | null> {
+    const resident = await this.residentsRepo.findOne({
+      where: { id, tenantId: this.tenantContext.tenantId },
+      relations: ['route'],
+    });
+    if (!resident) return null;
+    return { isActive: resident.isActive, routeAssigned: resident.route != null };
+  }
+
   async findByPhoneNumber(phoneNumber: string): Promise<Resident | null> {
     return this.residentsRepo.findOne({
       where: { phoneNumber, tenantId: this.tenantContext.tenantId },

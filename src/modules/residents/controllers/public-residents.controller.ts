@@ -15,6 +15,8 @@ import { ResidentRegistrationService } from '../services/resident-registration.s
 import { RegisterResidentInput } from '../dtos/inputs/register-resident.input';
 import { RegisterResidentOutput } from '../dtos/outputs/register-resident.output';
 import { UnsubscribeResidentInput } from '../dtos/inputs/unsubscribe-resident.input';
+import { ResidentStatusInput } from '../dtos/inputs/resident-status.input';
+import { ResidentStatusOutput } from '../dtos/outputs/resident-status.output';
 
 /**
  * Public resident endpoints for the PWA (no JWT). Tenant is resolved from the
@@ -56,5 +58,30 @@ export class PublicResidentsController {
     }
     await this.registrationService.unregister(input, ownerToken);
     return { success: true };
+  }
+
+  /**
+   * Lets a device confirm its stored registration still exists and still has
+   * coverage (C7). POST, not GET, because the owner token must not end up in a
+   * URL (proxy logs, browser history) and the tenant slug belongs with it.
+   */
+  @Public()
+  // Looser than register/unsubscribe: every app open calls this, it only reads,
+  // and under CGNAT a whole neighborhood shares one IP.
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Post('status')
+  @HttpCode(HttpStatus.OK)
+  @ApiHeader({ name: 'x-owner-token', required: true, description: 'Device owner token' })
+  @ApiOperation({ summary: 'Check whether a stored registration is still valid (owner-token gated)' })
+  status(
+    @Body() input: ResidentStatusInput,
+    @Headers('x-owner-token') ownerToken?: string,
+  ): Promise<ResidentStatusOutput> {
+    // No token means the device cannot prove ownership — the same dead end as a
+    // deleted record, so answer with the state that makes it re-register.
+    if (!ownerToken) {
+      return Promise.resolve({ status: 'unknown', routeAssigned: false });
+    }
+    return this.registrationService.status(input, ownerToken);
   }
 }

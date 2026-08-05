@@ -6,6 +6,8 @@ import { TenantContextService } from '../../../common/context/tenant-context.ser
 import { RegisterResidentInput } from '../dtos/inputs/register-resident.input';
 import { RegisterResidentOutput } from '../dtos/outputs/register-resident.output';
 import { UnsubscribeResidentInput } from '../dtos/inputs/unsubscribe-resident.input';
+import { ResidentStatusInput } from '../dtos/inputs/resident-status.input';
+import { ResidentStatusOutput } from '../dtos/outputs/resident-status.output';
 
 /**
  * Orchestrates the public resident registration (roadmap B1): resolve the
@@ -47,7 +49,43 @@ export class ResidentRegistrationService {
         auth: input.pushSubscription.auth,
       });
 
-      return { residentId: resident.id, ownerToken };
+      // A resident outside every route's collection radius is still registered,
+      // but nothing will ever notify them. Report it so the PWA can say so
+      // rather than showing "¡Listo!" over silence.
+      return { residentId: resident.id, ownerToken, routeAssigned: resident.route != null };
+    });
+  }
+
+  /**
+   * What the device's stored registration is still worth (roadmap C7). The PWA
+   * decides it is registered from localStorage alone, so a record an admin
+   * deleted or deactivated leaves it showing "¡Listo!" forever with no way back.
+   * Also refreshes coverage, which changes whenever routes are redrawn.
+   *
+   * A missing record and a bad token both answer `unknown`: the device's
+   * recovery is identical, and keeping them indistinguishable stops this public
+   * endpoint from being used to probe which resident ids exist.
+   */
+  async status(input: ResidentStatusInput, ownerToken: string): Promise<ResidentStatusOutput> {
+    const tenant = await this.tenantsService.findBySlug(input.tenantSlug);
+    if (!tenant || !tenant.isActive) {
+      throw new NotFoundException('Municipio no encontrado o no está activo');
+    }
+
+    return this.tenantContext.runWith(tenant.id, async () => {
+      const authorized = await this.residentsService.verifyOwnerToken(
+        input.residentId,
+        ownerToken,
+      );
+      if (!authorized) return { status: 'unknown', routeAssigned: false };
+
+      const state = await this.residentsService.findRegistrationState(input.residentId);
+      if (!state) return { status: 'unknown', routeAssigned: false };
+
+      return {
+        status: state.isActive ? 'active' : 'inactive',
+        routeAssigned: state.routeAssigned,
+      };
     });
   }
 

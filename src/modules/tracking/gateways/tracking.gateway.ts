@@ -19,6 +19,7 @@ import { GpsPositionInput } from '../dtos/inputs/gps-position.input';
 import { IJwtPayload } from '../../../common/interfaces/jwt-payload.interface';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { WeeklySchedule } from '../../schedules/entities/weekly-schedule.entity';
+import { findRouteStartProblem, NO_TRUCK_ASSIGNED } from '../utils/route-start-problem.util';
 import {
   IDriverClientData,
   IDriverRouteSegment,
@@ -233,10 +234,14 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     data: IDriverClientData,
   ): Promise<{ event: string; data: IRouteStartedEvent | string }> {
     const truck = await this.trucksService.findByDriverId(data.user.sub);
-    if (!truck) return { event: 'error', data: 'No active truck assigned to this driver' };
+    const schedule = truck ? await this.schedulesService.findForToday(truck.id) : null;
 
-    const schedule = await this.schedulesService.findForToday(truck.id);
-    if (!schedule) return { event: 'error', data: 'No route scheduled for today' };
+    // Same wording the Android app gets (see route-start-problem.util): one
+    // missing schedule must not be explained two different ways.
+    const problem = findRouteStartProblem(truck, schedule);
+    if (problem || !truck || !schedule) {
+      return { event: 'error', data: problem?.message ?? NO_TRUCK_ASSIGNED.message };
+    }
 
     const session = await this.routeSessionService.startOrResume(
       data.user.sub,

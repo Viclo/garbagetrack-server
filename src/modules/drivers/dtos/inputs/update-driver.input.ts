@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, MinLength, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, MinLength, IsBoolean, IsDateString, ValidateIf } from 'class-validator';
 
 export class UpdateDriverInput {
   @ApiPropertyOptional()
@@ -22,6 +22,13 @@ export class UpdateDriverInput {
   @IsOptional()
   @IsString()
   licenseNumber?: string;
+
+  /** Null clears a previously recorded expiry, so `IsDateString` must skip it. */
+  @ApiPropertyOptional({ example: '2027-05-31', nullable: true })
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsDateString()
+  licenseExpiresAt?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

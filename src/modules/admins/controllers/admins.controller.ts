@@ -19,6 +19,8 @@ import { Roles } from '../../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { IAdmin } from '../interfaces/admin.interface';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { IJwtPayload } from '../../../common/interfaces/jwt-payload.interface';
 
 @ApiTags('admins')
 @ApiBearerAuth()
@@ -48,14 +50,20 @@ export class AdminsController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update an admin' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() input: UpdateAdminInput): Promise<IAdmin> {
-    return this.adminsService.update(id, input);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() input: UpdateAdminInput,
+    @CurrentUser() user: IJwtPayload,
+  ): Promise<IAdmin> {
+    // The caller's own id goes down so the service can refuse the two moves
+    // that lock a municipality out of its own panel.
+    return this.adminsService.update(id, input, user.sub);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete an admin' })
-  remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    return this.adminsService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: IJwtPayload): Promise<void> {
+    return this.adminsService.remove(id, user.sub);
   }
 }

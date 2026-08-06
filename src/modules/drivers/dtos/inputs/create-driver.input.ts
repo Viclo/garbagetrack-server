@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength, IsOptional, IsDateString } from 'class-validator';
 
 export class CreateDriverInput {
   @ApiProperty({ example: 'driver01' })
@@ -27,4 +27,9 @@ export class CreateDriverInput {
   @IsOptional()
   @IsString()
   licenseNumber?: string;
+
+  @ApiPropertyOptional({ example: '2027-05-31', description: 'License expiry date (YYYY-MM-DD)' })
+  @IsOptional()
+  @IsDateString()
+  licenseExpiresAt?: string;
 }

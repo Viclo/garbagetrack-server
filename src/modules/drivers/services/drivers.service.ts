@@ -30,16 +30,18 @@ export class DriversService {
       name: input.name,
       phone: input.phone ?? null,
       licenseNumber: input.licenseNumber ?? null,
+      licenseExpiresAt: input.licenseExpiresAt ?? null,
       tenantId: this.tenantContext.tenantId,
     });
-    return this.driversRepository.save(driver);
+    return this.toInterface(await this.driversRepository.save(driver));
   }
 
   async findAll(): Promise<IDriver[]> {
-    return this.driversRepository.find({
+    const drivers = await this.driversRepository.find({
       where: { tenantId: this.tenantContext.tenantId },
       order: { createdAt: 'DESC' },
     });
+    return drivers.map((driver) => this.toInterface(driver));
   }
 
   async findOne(id: number): Promise<IDriver> {
@@ -47,7 +49,7 @@ export class DriversService {
       where: { id, tenantId: this.tenantContext.tenantId },
     });
     if (!driver) throw new NotFoundException(`Driver with ID ${id} not found`);
-    return driver;
+    return this.toInterface(driver);
   }
 
   /** Unscoped: used by login, which resolves the tenant FROM the matched user. */
@@ -75,9 +77,10 @@ export class DriversService {
     if (input.name !== undefined) driver.name = input.name;
     if (input.phone !== undefined) driver.phone = input.phone;
     if (input.licenseNumber !== undefined) driver.licenseNumber = input.licenseNumber;
+    if (input.licenseExpiresAt !== undefined) driver.licenseExpiresAt = input.licenseExpiresAt;
     if (input.isActive !== undefined) driver.isActive = input.isActive;
 
-    return this.driversRepository.save(driver);
+    return this.toInterface(await this.driversRepository.save(driver));
   }
 
   async remove(id: number): Promise<void> {
@@ -86,5 +89,28 @@ export class DriversService {
     });
     if (!driver) throw new NotFoundException(`Driver with ID ${id} not found`);
     await this.driversRepository.remove(driver);
+  }
+
+  /**
+   * Public shape: never let passwordHash leave the service.
+   *
+   * These methods used to return the entity straight from the repository, so
+   * GET /drivers handed every driver's bcrypt hash to the admin browser — the
+   * IDriver return type says otherwise, but TypeScript cannot strip fields at
+   * runtime. Mirrors AdminsService.toInterface.
+   */
+  private toInterface(driver: Driver): IDriver {
+    return {
+      id: driver.id,
+      tenantId: driver.tenantId,
+      username: driver.username,
+      name: driver.name,
+      phone: driver.phone,
+      licenseNumber: driver.licenseNumber,
+      licenseExpiresAt: driver.licenseExpiresAt,
+      isActive: driver.isActive,
+      createdAt: driver.createdAt,
+      updatedAt: driver.updatedAt,
+    };
   }
 }

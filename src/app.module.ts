@@ -21,6 +21,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { SystemConfigModule } from './modules/system-config/system-config.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
 import { PushModule } from './modules/push/push.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { PushModule } from './modules/push/push.module';
     SystemConfigModule,
     AssistantModule,
     PushModule,
+    DashboardModule,
   ],
   controllers: [AppController],
 })

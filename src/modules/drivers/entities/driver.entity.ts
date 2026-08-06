@@ -37,6 +37,17 @@ export class Driver {
   @Column({ name: 'license_number', nullable: true, type: 'varchar' })
   licenseNumber!: string | null;
 
+  /**
+   * When the driver's licence stops being valid (YYYY-MM-DD).
+   *
+   * A `date`, not a timestamp: a licence expires on a calendar day in the
+   * municipality, and a timestamp would make it expire at a UTC hour that falls
+   * on the previous day locally. Null means nobody has recorded one yet, which
+   * the admin list flags as pending rather than as expired.
+   */
+  @Column({ name: 'license_expires_at', nullable: true, type: 'date' })
+  licenseExpiresAt!: string | null;
+
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 

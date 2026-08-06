@@ -32,3 +32,20 @@ export function localDayOfWeek(now: Date = new Date()): DayOfWeek | null {
   }).format(now);
   return WEEKDAY_TO_ENUM[weekday] ?? null;
 }
+
+/** Spanish day names. Error messages reach drivers, who read Spanish only. */
+export const DAY_LABELS_ES: Record<DayOfWeek, string> = {
+  [DayOfWeek.MON]: 'lunes',
+  [DayOfWeek.TUE]: 'martes',
+  [DayOfWeek.WED]: 'miércoles',
+  [DayOfWeek.THU]: 'jueves',
+  [DayOfWeek.FRI]: 'viernes',
+  [DayOfWeek.SAT]: 'sábado',
+  [DayOfWeek.SUN]: 'domingo',
+};
+
+/** Today's weekday, named in Spanish, for messages shown to drivers. */
+export function localDayLabel(now: Date = new Date()): string {
+  const day = localDayOfWeek(now);
+  return day ? DAY_LABELS_ES[day] : 'hoy';
+}

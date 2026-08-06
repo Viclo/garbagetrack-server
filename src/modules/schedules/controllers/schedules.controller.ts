@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Delete,
@@ -27,9 +28,18 @@ export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create or update a route assignment for a truck on a given day' })
-  upsert(@Body() input: UpsertScheduleInput): Promise<IWeeklySchedule> {
+  @ApiOperation({ summary: 'Assign a route to a truck on a given day' })
+  create(@Body() input: UpsertScheduleInput): Promise<IWeeklySchedule> {
     return this.schedulesService.upsert(input);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Move an existing assignment to another day, truck or route' })
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() input: UpsertScheduleInput,
+  ): Promise<IWeeklySchedule> {
+    return this.schedulesService.upsert(input, id);
   }
 
   @Get()

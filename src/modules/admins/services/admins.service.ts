@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Admin } from '../entities/admin.entity';
 import { CreateAdminInput } from '../dtos/inputs/create-admin.input';
@@ -63,11 +63,18 @@ export class AdminsService {
     return this.adminsRepository.findOne({ where: { id } });
   }
 
-  async update(id: number, input: UpdateAdminInput): Promise<IAdmin> {
+  async update(id: number, input: UpdateAdminInput, actingAdminId?: number): Promise<IAdmin> {
     const admin = await this.adminsRepository.findOne({
       where: { id, tenantId: this.tenantContext.tenantId },
     });
     if (!admin) throw new NotFoundException(`Admin with ID ${id} not found`);
+
+    if (input.isActive === false) {
+      if (id === actingAdminId) {
+        throw new ConflictException('No puedes desactivar tu propia cuenta.');
+      }
+      await this.assertNotLastActiveAdmin(id);
+    }
 
     if (input.password) {
       admin.passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
@@ -78,12 +85,32 @@ export class AdminsService {
     return this.toInterface(await this.adminsRepository.save(admin));
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: number, actingAdminId?: number): Promise<void> {
     const admin = await this.adminsRepository.findOne({
       where: { id, tenantId: this.tenantContext.tenantId },
     });
     if (!admin) throw new NotFoundException(`Admin with ID ${id} not found`);
+    if (id === actingAdminId) {
+      throw new ConflictException('No puedes eliminar tu propia cuenta.');
+    }
+    await this.assertNotLastActiveAdmin(id);
     await this.adminsRepository.remove(admin);
+  }
+
+  /**
+   * A municipality with no active administrator cannot get one back — nothing
+   * in the product creates the first admin, and the seed only runs on an empty
+   * database. So the last one standing is not removable, even deliberately.
+   */
+  private async assertNotLastActiveAdmin(id: number): Promise<void> {
+    const remaining = await this.adminsRepository.count({
+      where: { tenantId: this.tenantContext.tenantId, isActive: true, id: Not(id) },
+    });
+    if (remaining === 0) {
+      throw new ConflictException(
+        'Debe quedar al menos un administrador activo en el municipio.',
+      );
+    }
   }
 
   /** Public shape: never let passwordHash leave the service. */

@@ -132,6 +132,11 @@ export class TrackingService {
    * no route until a live socket event happened to arrive, so opening the map
    * showed "Ruta no disponible" and drew no route line — and never recovered if
    * the socket was down.
+   *
+   * The session lookup deliberately does NOT require an open session. A truck
+   * whose driver closed the route is exactly the case the map most needs to
+   * explain — "last seen 14:30, route finished" beats a marker sitting silently
+   * on a street with no way to tell it apart from one that lost signal.
    */
   async getLatestPositions(): Promise<ILatestTruckPosition[]> {
     const rows = await this.dataSource.query<ILatestTruckPosition[]>(
@@ -145,22 +150,31 @@ export class TrackingService {
               -- Device time, not receive time: a batch of fixes that arrives
               -- after a signal gap must not make a truck look live at a place
               -- it left ten minutes ago.
-              COALESCE(tp.recorded_at, tp.timestamp) AS "timestamp"
+              COALESCE(tp.recorded_at, tp.timestamp) AS "timestamp",
+              t.name                   AS "truckName",
+              t.license_plate          AS "licensePlate",
+              r.name                   AS "routeName",
+              d.name                   AS "driverName",
+              session.started_at       AS "sessionStartedAt",
+              session.ended_at         AS "sessionEndedAt"
        FROM truck_positions tp
-       -- LATERAL, not a plain join: a truck can carry more than one open
-       -- session (two drivers), and this must resolve to exactly one row.
+       -- LATERAL, not a plain join: a truck can carry more than one session,
+       -- and this must resolve to exactly one row. Open sessions sort first so
+       -- a live run always wins over a finished one started later the same day.
        LEFT JOIN LATERAL (
-         SELECT rs.route_id
+         SELECT rs.route_id, rs.started_at, rs.ended_at
          FROM route_sessions rs
          WHERE rs.truck_id = tp.truck_id
            AND rs.tenant_id = tp.tenant_id
-           AND rs.ended_at IS NULL
-         ORDER BY rs.started_at DESC
+         ORDER BY (rs.ended_at IS NULL) DESC, rs.started_at DESC
          LIMIT 1
        ) session ON TRUE
        LEFT JOIN route_segments seg
               ON seg.route_id = session.route_id
              AND seg.segment_index = tp.current_segment_index
+       LEFT JOIN trucks t ON t.id = tp.truck_id
+       LEFT JOIN routes r ON r.id = session.route_id
+       LEFT JOIN drivers d ON d.id = t.driver_id
        WHERE tp.tenant_id = $1
        ORDER BY tp.truck_id, COALESCE(tp.recorded_at, tp.timestamp) DESC`,
       [this.tenantContext.tenantId],

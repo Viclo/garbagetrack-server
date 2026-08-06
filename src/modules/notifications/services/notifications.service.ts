@@ -11,6 +11,7 @@ import { IPushPayload } from '../../push/interfaces/push.interface';
 import { TenantsService } from '../../tenants/services/tenants.service';
 import { AlertStage } from '../../proximity/interfaces/proximity.interface';
 import { IStageAlertInput } from '../interfaces/notification.interface';
+import { INotificationHistoryEntry } from '../interfaces/notification-history.interface';
 
 @Injectable()
 export class NotificationsService {
@@ -128,6 +129,67 @@ export class NotificationsService {
         `${etaMinutes ? `, ETA ~${etaMinutes} min` : ''} → ` +
         `${subscriptions.length} sub(s) [${messageStatus}]`,
     );
+  }
+
+  /**
+   * Every alert this resident has been sent, newest first (B6).
+   *
+   * The pilot's whole question is "did the notification actually reach this
+   * house?", and until now the only answer was in the server log. `limit`
+   * keeps the payload bounded for a resident who has been on a daily route for
+   * months — the recent runs are the ones anyone checks.
+   */
+  async findHistoryForResident(
+    residentId: number,
+    limit = 50,
+  ): Promise<INotificationHistoryEntry[]> {
+    const logs = await this.logsRepo.find({
+      where: { resident: { id: residentId }, tenantId: this.tenantContext.tenantId },
+      relations: ['route'],
+      order: { sentAt: 'DESC', createdAt: 'DESC' },
+      take: limit,
+    });
+
+    return logs.map((log) => ({
+      id: log.id,
+      sentAt: log.sentAt,
+      createdAt: log.createdAt.toISOString(),
+      stage: log.stage,
+      channel: log.channel,
+      messageStatus: log.messageStatus,
+      routeId: log.route?.id ?? null,
+      routeName: log.route?.name ?? null,
+    }));
+  }
+
+  /**
+   * Alerts sent per municipality-local day over the last `days` days, oldest
+   * first and including days with none, so the dashboard chart has no gaps.
+   */
+  async countByDay(days: number): Promise<Array<{ date: string; sent: number; failed: number }>> {
+    // to_char, not the raw date column: node-postgres hydrates DATE into a JS
+    // Date at the *process* timezone, and re-deriving 'YYYY-MM-DD' from that on
+    // a UTC host shifts every row back a day. The text never lies.
+    const rows = await this.logsRepo
+      .createQueryBuilder('log')
+      .select(`to_char(log.sentAt, 'YYYY-MM-DD')`, 'date')
+      .addSelect(`COUNT(*) FILTER (WHERE log.messageStatus = 'sent')`, 'sent')
+      .addSelect(`COUNT(*) FILTER (WHERE log.messageStatus <> 'sent')`, 'failed')
+      .where('log.tenantId = :tenantId', { tenantId: this.tenantContext.tenantId })
+      .groupBy(`to_char(log.sentAt, 'YYYY-MM-DD')`)
+      .getRawMany<{ date: string; sent: string; failed: string }>();
+
+    const byDate = new Map(
+      rows.map((row) => [row.date, { sent: Number(row.sent), failed: Number(row.failed) }]),
+    );
+
+    const series: Array<{ date: string; sent: number; failed: number }> = [];
+    for (let offset = days - 1; offset >= 0; offset -= 1) {
+      const date = localDateString(new Date(Date.now() - offset * 24 * 60 * 60 * 1000));
+      const counts = byDate.get(date) ?? { sent: 0, failed: 0 };
+      series.push({ date, ...counts });
+    }
+    return series;
   }
 
   /**

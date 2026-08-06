@@ -114,6 +114,19 @@ export interface ILatestTruckPosition {
   segmentIndex: number | null;
   streetName: string | null;
   timestamp: Date;
+  /** Fleet identity, so the map can say "ABC-123" instead of "Camión #4". */
+  truckName: string | null;
+  licensePlate: string | null;
+  routeName: string | null;
+  driverName: string | null;
+  /**
+   * The run this fix belongs to. `sessionEndedAt` is what turns a stale marker
+   * into a readable fact: a truck that stopped reporting because the driver
+   * closed the route is finished, while one whose session is still open simply
+   * went silent — and the admin map used to show both identically.
+   */
+  sessionStartedAt: Date | null;
+  sessionEndedAt: Date | null;
 }
 
 export interface IRouteSessionSummary {

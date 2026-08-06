@@ -18,6 +18,8 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { IResident } from '../interfaces/resident.interface';
 import { UpdateResidentInput } from '../dtos/inputs/update-resident.input';
+import { NotificationsService } from '../../notifications/services/notifications.service';
+import { INotificationHistoryEntry } from '../../notifications/interfaces/notification-history.interface';
 
 @ApiTags('residents')
 @ApiBearerAuth()
@@ -25,7 +27,10 @@ import { UpdateResidentInput } from '../dtos/inputs/update-resident.input';
 @Roles(UserRole.ADMIN)
 @Controller('residents')
 export class ResidentsController {
-  constructor(private readonly residentsService: ResidentsService) {}
+  constructor(
+    private readonly residentsService: ResidentsService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -45,6 +50,17 @@ export class ResidentsController {
   @ApiOperation({ summary: 'Get a resident by ID' })
   findOne(@Param('id', ParseIntPipe) id: number): Promise<IResident> {
     return this.residentsService.findOne(id);
+  }
+
+  @Get(':id/notifications')
+  @ApiOperation({ summary: 'Alerts this resident has been sent, newest first' })
+  async findNotifications(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<INotificationHistoryEntry[]> {
+    // Resolve the resident first so a stranger's id in another tenant answers
+    // 404 rather than an empty (and thus reassuring) history.
+    await this.residentsService.findOne(id);
+    return this.notificationsService.findHistoryForResident(id);
   }
 
   @Patch(':id')

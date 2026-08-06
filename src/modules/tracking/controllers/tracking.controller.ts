@@ -18,6 +18,7 @@ import { TrucksService } from '../../trucks/services/trucks.service';
 import { SchedulesService } from '../../schedules/services/schedules.service';
 import { TrackingGateway } from '../gateways/tracking.gateway';
 import { DriverGpsPositionInput } from '../dtos/inputs/driver-gps-position.input';
+import { findRouteStartProblem, NO_TRUCK_ASSIGNED } from '../utils/route-start-problem.util';
 
 @ApiTags('tracking')
 @ApiBearerAuth()
@@ -62,10 +63,18 @@ export class TrackingController {
     @CurrentUser() user: IJwtPayload,
   ): Promise<IRouteStartedEvent & { sessionId: number }> {
     const truck = await this.trucksService.findByDriverId(user.sub);
-    if (!truck) throw new BadRequestException('No active truck assigned to this driver');
+    const schedule = truck ? await this.schedulesService.findForToday(truck.id) : null;
 
-    const schedule = await this.schedulesService.findForToday(truck.id);
-    if (!schedule) throw new BadRequestException('No route scheduled for today');
+    // The driver reads this on their phone, so the envelope carries a Spanish
+    // explanation plus a stable `error` code the app keys its copy off —
+    // matching on message text would break on the first reword.
+    const problem = findRouteStartProblem(truck, schedule);
+    if (problem || !truck || !schedule) {
+      throw new BadRequestException({
+        error: problem?.code ?? NO_TRUCK_ASSIGNED.code,
+        message: problem?.message ?? NO_TRUCK_ASSIGNED.message,
+      });
+    }
 
     const session = await this.routeSessionService.startOrResume(
       user.sub,

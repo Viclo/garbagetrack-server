@@ -22,7 +22,7 @@ export class WebPushService {
   constructor(config: ConfigService) {
     const publicKey = config.get<string>('webpush.publicKey');
     const privateKey = config.get<string>('webpush.privateKey');
-    const subject = config.get<string>('webpush.subject') ?? 'mailto:soporte@garbagetrack.app';
+    const subject = config.get<string>('webpush.subject') ?? 'mailto:soporte@yoteaviso.net';
 
     if (publicKey && privateKey) {
       webpush.setVapidDetails(subject, publicKey, privateKey);

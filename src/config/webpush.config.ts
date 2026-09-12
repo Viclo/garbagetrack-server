@@ -11,5 +11,5 @@ export const webpushConfig = registerAs('webpush', () => ({
   privateKey: process.env.VAPID_PRIVATE_KEY,
   // `mailto:` or your site URL — push services use it to contact you about
   // problematic sends. Required by the VAPID spec.
-  subject: process.env.VAPID_SUBJECT ?? 'mailto:soporte@garbagetrack.app',
+  subject: process.env.VAPID_SUBJECT ?? 'mailto:soporte@yoteaviso.net',
 }));

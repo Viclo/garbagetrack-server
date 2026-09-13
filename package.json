@@ -27,6 +27,8 @@
     "reset:dev": "ts-node -r tsconfig-paths/register src/database/scripts/reset-dev-data.ts",
     "seed": "ts-node -r tsconfig-paths/register src/database/seeds/seed.ts",
     "seed:prod": "node dist/database/seeds/seed.js",
+    "migrate:pilot-tenant": "ts-node -r tsconfig-paths/register src/database/scripts/split-pilot-tenant.ts",
+    "migrate:pilot-tenant:prod": "node dist/database/scripts/split-pilot-tenant.js",
     "migration:show": "npm run typeorm -- migration:show",
     "migration:create": "typeorm-ts-node-commonjs migration:create"
   },

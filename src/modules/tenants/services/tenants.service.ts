@@ -7,6 +7,22 @@ import { UpdateTenantInput } from '../dtos/inputs/update-tenant.input';
 
 export const DEFAULT_TENANT_SLUG = 'default';
 
+/**
+ * Slugs a municipality can never claim (roadmap B1): each would collide with
+ * a real or plausible future *.yoteaviso.net infrastructure subdomain, or
+ * with the platform tenant itself.
+ */
+const RESERVED_SLUGS = [
+  DEFAULT_TENANT_SLUG,
+  'api',
+  'www',
+  'app',
+  'platform',
+  'admin',
+  'mail',
+  'ftp',
+];
+
 @Injectable()
 export class TenantsService {
   constructor(@InjectRepository(Tenant) private readonly tenantsRepo: Repository<Tenant>) {}
@@ -24,6 +40,9 @@ export class TenantsService {
   }
 
   async create(input: CreateTenantInput): Promise<Tenant> {
+    if (RESERVED_SLUGS.includes(input.slug)) {
+      throw new ConflictException(`Slug "${input.slug}" is reserved and cannot be used`);
+    }
     const existing = await this.findBySlug(input.slug);
     if (existing) throw new ConflictException(`Tenant slug "${input.slug}" is already taken`);
     return this.tenantsRepo.save(

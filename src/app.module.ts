@@ -22,6 +22,7 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
 import { AssistantModule } from './modules/assistant/assistant.module';
 import { PushModule } from './modules/push/push.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { UsernameRegistryModule } from './common/services/username-registry.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
         logging: config.get<string>('app.nodeEnv') === 'development',
       }),
     }),
+    UsernameRegistryModule,
     TenantsModule,
     AuthModule,
     AdminsModule,

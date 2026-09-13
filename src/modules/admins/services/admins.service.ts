@@ -7,6 +7,7 @@ import { CreateAdminInput } from '../dtos/inputs/create-admin.input';
 import { UpdateAdminInput } from '../dtos/inputs/update-admin.input';
 import { IAdmin, IAdminWithPassword } from '../interfaces/admin.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
+import { UsernameRegistryService } from '../../../common/services/username-registry.service';
 import { UserRole } from '../../../common/enums/user-role.enum';
 
 const BCRYPT_ROUNDS = 12;
@@ -17,13 +18,15 @@ export class AdminsService {
     @InjectRepository(Admin)
     private readonly adminsRepository: Repository<Admin>,
     private readonly tenantContext: TenantContextService,
+    private readonly usernameRegistry: UsernameRegistryService,
   ) {}
 
   async create(input: CreateAdminInput, role: UserRole = UserRole.ADMIN): Promise<IAdmin> {
-    const existing = await this.adminsRepository.findOne({
-      where: { username: input.username, tenantId: this.tenantContext.tenantId },
-    });
-    if (existing) throw new ConflictException(`Username "${input.username}" is already taken`);
+    // Global, not tenant-scoped: a collision anywhere (any tenant, admin or
+    // driver) would make an apex login ambiguous — see UsernameRegistryService.
+    if (await this.usernameRegistry.isTaken(input.username)) {
+      throw new ConflictException(`Username "${input.username}" is already taken`);
+    }
 
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
     const admin = this.adminsRepository.create({
@@ -53,10 +56,13 @@ export class AdminsService {
   }
 
   /**
-   * Scoped by tenantId once the caller knows it (subdomain-resolved login).
-   * `tenantId` is optional only as a rollout shim: while the frontend isn't
-   * sending X-Tenant-Slug yet (pre roadmap C2), login falls back to a global
-   * lookup, same as before this migration. Remove the optionality once C2 ships.
+   * Scoped by tenantId when a municipality subdomain sent one. `tenantId` is
+   * deliberately still optional beyond the rollout: logging in from the bare
+   * apex has no tenant context, by design — anyone can sign in there and gets
+   * redirected to their own municipality's subdomain (frontend LoginForm), so
+   * this falls back to a global lookup. UsernameRegistryService is what keeps
+   * that lookup unambiguous by rejecting cross-tenant username collisions at
+   * creation time.
    */
   async findByUsername(username: string, tenantId?: number): Promise<IAdminWithPassword | null> {
     const where = tenantId != null ? { username, tenantId } : { username };

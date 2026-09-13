@@ -19,10 +19,12 @@ export class AuthService {
 
   /**
    * `tenantSlug` comes from the X-Tenant-Slug header (the subdomain the login
-   * request arrived on). It's optional only as a rollout shim — see
-   * AdminsService.findByUsername — and, when given, must resolve to a real
-   * active tenant: an unknown/inactive slug fails the same generic way as a
-   * wrong password, so a login attempt can't be used to probe which
+   * request arrived on). Deliberately optional: logging in from the bare apex
+   * carries no tenant at all — anyone can sign in there and the frontend
+   * redirects them to their own municipality's subdomain afterward — see
+   * AdminsService.findByUsername. When a slug IS given, it must resolve to a
+   * real active tenant: an unknown/inactive slug fails the same generic way as
+   * a wrong password, so a login attempt can't be used to probe which
    * municipality slugs exist.
    */
   async validateUser(
@@ -69,6 +71,24 @@ export class AuthService {
       tenantSlug: user.tenantSlug,
     };
     return { accessToken: this.jwtService.sign(payload), user };
+  }
+
+  /**
+   * Rehydrates the full profile (name, tenantName — not carried in the JWT
+   * itself) from a valid token's claims. Needed because the frontend's cached
+   * copy of this (roadmap C2 login-redirect flow) lives in a cookie that does
+   * NOT reliably follow the JWT across a municipality subdomain redirect —
+   * unlike the JWT's own claims, restating a user's profile as a *new*
+   * cross-subdomain cookie write hits stricter browser limits than reading an
+   * already-shared one. Simpler and more robust to just re-fetch it here.
+   */
+  async me(payload: IJwtPayload): Promise<IAuthUser | null> {
+    const user =
+      payload.role === UserRole.DRIVER
+        ? await this.driversService.findByIdForAuth(payload.sub)
+        : await this.adminsService.findByIdForAuth(payload.sub);
+    if (!user?.isActive) return null;
+    return this.buildAuthUser(user.id, user.username, user.name, payload.role, user.tenantId);
   }
 
   /**

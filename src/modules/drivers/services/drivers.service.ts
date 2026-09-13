@@ -7,6 +7,7 @@ import { CreateDriverInput } from '../dtos/inputs/create-driver.input';
 import { UpdateDriverInput } from '../dtos/inputs/update-driver.input';
 import { IDriver, IDriverWithPassword } from '../interfaces/driver.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
+import { UsernameRegistryService } from '../../../common/services/username-registry.service';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -16,13 +17,15 @@ export class DriversService {
     @InjectRepository(Driver)
     private readonly driversRepository: Repository<Driver>,
     private readonly tenantContext: TenantContextService,
+    private readonly usernameRegistry: UsernameRegistryService,
   ) {}
 
   async create(input: CreateDriverInput): Promise<IDriver> {
-    const existing = await this.driversRepository.findOne({
-      where: { username: input.username, tenantId: this.tenantContext.tenantId },
-    });
-    if (existing) throw new ConflictException(`Username "${input.username}" is already taken`);
+    // Global, not tenant-scoped: a collision anywhere (any tenant, admin or
+    // driver) would make an apex login ambiguous — see UsernameRegistryService.
+    if (await this.usernameRegistry.isTaken(input.username)) {
+      throw new ConflictException(`Username "${input.username}" is already taken`);
+    }
 
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
     const driver = this.driversRepository.create({
@@ -54,10 +57,13 @@ export class DriversService {
   }
 
   /**
-   * Scoped by tenantId once the caller knows it (subdomain-resolved login).
-   * `tenantId` is optional only as a rollout shim: while the frontend isn't
-   * sending X-Tenant-Slug yet (pre roadmap C2), login falls back to a global
-   * lookup, same as before this migration. Remove the optionality once C2 ships.
+   * Scoped by tenantId when a municipality subdomain sent one. `tenantId` is
+   * deliberately still optional beyond the rollout: logging in from the bare
+   * apex has no tenant context, by design — anyone can sign in there and gets
+   * redirected to their own municipality's subdomain (frontend LoginForm), so
+   * this falls back to a global lookup. UsernameRegistryService is what keeps
+   * that lookup unambiguous by rejecting cross-tenant username collisions at
+   * creation time.
    */
   async findByUsername(username: string, tenantId?: number): Promise<IDriverWithPassword | null> {
     const where = tenantId != null ? { username, tenantId } : { username };

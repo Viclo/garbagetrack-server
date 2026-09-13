@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../../../../common/enums/user-role.enum';
 
-class AuthUserOutput {
+export class AuthUserOutput {
   @ApiProperty() id!: number;
   @ApiProperty() username!: string;
   @ApiProperty({ enum: UserRole }) role!: UserRole;

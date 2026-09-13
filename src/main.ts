@@ -28,10 +28,15 @@ async function bootstrap(): Promise<void> {
 
   const corsOrigins = configService.get<string[]>('app.corsOrigins') ?? [];
   const corsWildcardDomain = configService.get<string>('app.corsWildcardDomain');
-  // `https://<label>.<domain>` or the bare `https://<domain>` — one env var covers
+  // `<scheme>://<label>.<domain>[:port]` or the bare domain — one env var covers
   // every current and future municipality subdomain, no redeploy per onboarding.
+  // http:// and an optional port are allowed (not just https://) so this same
+  // pattern also covers CORS_WILDCARD_DOMAIN=localhost for local subdomain
+  // testing (roadmap C3, e.g. http://pilot.localhost:3000) — harmless in
+  // production since Vercel/Cloudflare never actually serve a *.yoteaviso.net
+  // origin over plain http.
   const corsWildcardPattern = corsWildcardDomain
-    ? new RegExp(`^https://([a-z0-9-]+\\.)?${corsWildcardDomain.replace(/\./g, '\\.')}$`)
+    ? new RegExp(`^https?://([a-z0-9-]+\\.)?${corsWildcardDomain.replace(/\./g, '\\.')}(:\\d+)?$`)
     : null;
   app.enableCors({
     origin(origin, callback) {

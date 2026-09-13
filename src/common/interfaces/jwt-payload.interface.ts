@@ -5,4 +5,5 @@ export interface IJwtPayload {
   username: string;
   role: UserRole;
   tenantId: number;
+  tenantSlug: string;
 }

@@ -6,10 +6,12 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Unique,
 } from 'typeorm';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 
 @Entity('drivers')
+@Unique(['tenantId', 'username'])
 export class Driver {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -21,8 +23,7 @@ export class Driver {
   @Column({ name: 'tenant_id' })
   tenantId!: number;
 
-  // Usernames stay globally unique so login does not need a tenant selector.
-  @Column({ unique: true })
+  @Column()
   username!: string;
 
   @Column({ name: 'password_hash' })

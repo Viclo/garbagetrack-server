@@ -20,7 +20,9 @@ export class AdminsService {
   ) {}
 
   async create(input: CreateAdminInput, role: UserRole = UserRole.ADMIN): Promise<IAdmin> {
-    const existing = await this.adminsRepository.findOne({ where: { username: input.username } });
+    const existing = await this.adminsRepository.findOne({
+      where: { username: input.username, tenantId: this.tenantContext.tenantId },
+    });
     if (existing) throw new ConflictException(`Username "${input.username}" is already taken`);
 
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
@@ -50,9 +52,15 @@ export class AdminsService {
     return this.toInterface(admin);
   }
 
-  /** Unscoped: used by login, which resolves the tenant FROM the matched user. */
-  async findByUsername(username: string): Promise<IAdminWithPassword | null> {
-    return this.adminsRepository.findOne({ where: { username } });
+  /**
+   * Scoped by tenantId once the caller knows it (subdomain-resolved login).
+   * `tenantId` is optional only as a rollout shim: while the frontend isn't
+   * sending X-Tenant-Slug yet (pre roadmap C2), login falls back to a global
+   * lookup, same as before this migration. Remove the optionality once C2 ships.
+   */
+  async findByUsername(username: string, tenantId?: number): Promise<IAdminWithPassword | null> {
+    const where = tenantId != null ? { username, tenantId } : { username };
+    return this.adminsRepository.findOne({ where });
   }
 
   /**

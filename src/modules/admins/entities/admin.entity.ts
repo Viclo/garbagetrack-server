@@ -6,11 +6,13 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Unique,
 } from 'typeorm';
 import { Tenant } from '../../tenants/entities/tenant.entity';
 import { UserRole } from '../../../common/enums/user-role.enum';
 
 @Entity('admins')
+@Unique(['tenantId', 'username'])
 export class Admin {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -22,7 +24,7 @@ export class Admin {
   @Column({ name: 'tenant_id' })
   tenantId!: number;
 
-  @Column({ unique: true })
+  @Column()
   username!: string;
 
   @Column({ name: 'password_hash' })

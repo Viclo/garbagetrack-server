@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { AdminsService } from '../../admins/services/admins.service';
@@ -17,15 +17,34 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async validateUser(username: string, password: string): Promise<IAuthUser | null> {
-    const admin = await this.adminsService.findByUsername(username);
+  /**
+   * `tenantSlug` comes from the X-Tenant-Slug header (the subdomain the login
+   * request arrived on). It's optional only as a rollout shim — see
+   * AdminsService.findByUsername — and, when given, must resolve to a real
+   * active tenant: an unknown/inactive slug fails the same generic way as a
+   * wrong password, so a login attempt can't be used to probe which
+   * municipality slugs exist.
+   */
+  async validateUser(
+    username: string,
+    password: string,
+    tenantSlug?: string,
+  ): Promise<IAuthUser | null> {
+    let tenantId: number | undefined;
+    if (tenantSlug) {
+      const tenant = await this.tenantsService.findBySlug(tenantSlug);
+      if (!tenant?.isActive) throw new UnauthorizedException('Invalid credentials');
+      tenantId = tenant.id;
+    }
+
+    const admin = await this.adminsService.findByUsername(username, tenantId);
     if (admin?.isActive) {
       const valid = await bcrypt.compare(password, admin.passwordHash);
       if (valid)
         return this.buildAuthUser(admin.id, admin.username, admin.name, admin.role, admin.tenantId);
     }
 
-    const driver = await this.driversService.findByUsername(username);
+    const driver = await this.driversService.findByUsername(username, tenantId);
     if (driver?.isActive) {
       const valid = await bcrypt.compare(password, driver.passwordHash);
       if (valid)
@@ -47,6 +66,7 @@ export class AuthService {
       username: user.username,
       role: user.role,
       tenantId: user.tenantId,
+      tenantSlug: user.tenantSlug,
     };
     return { accessToken: this.jwtService.sign(payload), user };
   }

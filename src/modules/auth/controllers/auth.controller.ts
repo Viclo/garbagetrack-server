@@ -1,5 +1,5 @@
 import { Controller, Post, UseGuards, HttpCode, HttpStatus, Body } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBody, ApiHeader } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from '../services/auth.service';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -19,6 +19,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate admin or driver and receive a JWT' })
   @ApiBody({ type: LoginInput })
+  @ApiHeader({
+    name: 'x-tenant-slug',
+    required: false,
+    description:
+      'Municipality subdomain the request came from. Scopes the username lookup to that tenant; ' +
+      'omitted falls back to a global lookup (rollout shim, see roadmap A1/A3/C2).',
+  })
   login(@Body() _loginInput: LoginInput, @CurrentUser() user: IAuthUser): LoginOutput {
     return this.authService.login(user);
   }

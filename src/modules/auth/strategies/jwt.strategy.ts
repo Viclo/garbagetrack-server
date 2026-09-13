@@ -19,8 +19,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: IJwtPayload): Promise<IJwtPayload> {
-    // A valid signature is not enough: the account and its tenant must still
-    // be active, otherwise a 7-day token outlives a deactivation.
     const active = await this.authService.verifyActiveUser(payload);
     if (!active) throw new UnauthorizedException('Account is disabled or no longer exists');
     return payload;

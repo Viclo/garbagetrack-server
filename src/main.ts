@@ -8,6 +8,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { TenantHeaderGuard } from './common/guards/tenant-header.guard';
 import { TenantContextInterceptor } from './common/context/tenant-context.interceptor';
 import { TenantContextService } from './common/context/tenant-context.service';
 
@@ -24,8 +25,23 @@ async function bootstrap(): Promise<void> {
   const nodeEnv = configService.get<string>('app.nodeEnv');
 
   app.use(helmet());
+
+  const corsOrigins = configService.get<string[]>('app.corsOrigins') ?? [];
+  const corsWildcardDomain = configService.get<string>('app.corsWildcardDomain');
+  // `https://<label>.<domain>` or the bare `https://<domain>` — one env var covers
+  // every current and future municipality subdomain, no redeploy per onboarding.
+  const corsWildcardPattern = corsWildcardDomain
+    ? new RegExp(`^https://([a-z0-9-]+\\.)?${corsWildcardDomain.replace(/\./g, '\\.')}$`)
+    : null;
   app.enableCors({
-    origin: configService.get<string[]>('app.corsOrigins'),
+    origin(origin, callback) {
+      // No Origin header means a non-browser caller (curl, the native driver app) — allow it.
+      if (!origin) return callback(null, true);
+      if (corsOrigins.includes(origin) || corsWildcardPattern?.test(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error(`Origin ${origin} not allowed by CORS`), false);
+    },
     credentials: true,
   });
   app.setGlobalPrefix('api/v1', { exclude: ['/'] });
@@ -40,7 +56,9 @@ async function bootstrap(): Promise<void> {
   );
 
   const reflector = app.get(Reflector);
-  app.useGlobalGuards(new JwtAuthGuard(reflector));
+  // Order matters: JwtAuthGuard runs first and populates request.user, which
+  // TenantHeaderGuard then compares against X-Tenant-Slug.
+  app.useGlobalGuards(new JwtAuthGuard(reflector), new TenantHeaderGuard());
   app.useGlobalFilters(new HttpExceptionFilter());
   // Tenant context first so every downstream handler runs inside it.
   app.useGlobalInterceptors(

@@ -14,5 +14,8 @@ export const appConfig = registerAs('app', () => {
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),
+    // Matches the apex and any municipality subdomain, e.g. https://cochabamba.yoteaviso.net
+    // (roadmap A4) — a static CORS_ORIGINS list would need a redeploy per onboarded municipality.
+    corsWildcardDomain: process.env.CORS_WILDCARD_DOMAIN ?? null,
   };
 });

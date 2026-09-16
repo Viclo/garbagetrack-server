@@ -10,7 +10,10 @@ export const DEFAULT_TENANT_SLUG = 'default';
 /**
  * Slugs a municipality can never claim (roadmap B1): each would collide with
  * a real or plausible future *.yoteaviso.net infrastructure subdomain, or
- * with the platform tenant itself.
+ * with the platform tenant itself. "live" additionally collides with the
+ * static /r/live route (roadmap C4) — a tenant with that slug would have its
+ * old path-based resident link (/r/live) shadowed by that route instead of
+ * reaching its own registration page.
  */
 const RESERVED_SLUGS = [
   DEFAULT_TENANT_SLUG,
@@ -21,6 +24,7 @@ const RESERVED_SLUGS = [
   'admin',
   'mail',
   'ftp',
+  'live',
 ];
 
 @Injectable()

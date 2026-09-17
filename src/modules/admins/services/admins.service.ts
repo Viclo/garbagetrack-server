@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Admin } from '../entities/admin.entity';
 import { CreateAdminInput } from '../dtos/inputs/create-admin.input';
 import { UpdateAdminInput } from '../dtos/inputs/update-admin.input';
+import { UpdateSelfAdminInput } from '../dtos/inputs/update-self-admin.input';
 import { IAdmin, IAdminWithPassword } from '../interfaces/admin.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 import { UsernameRegistryService } from '../../../common/services/username-registry.service';
@@ -95,6 +101,25 @@ export class AdminsService {
     }
     if (input.name !== undefined) admin.name = input.name;
     if (input.isActive !== undefined) admin.isActive = input.isActive;
+
+    return this.toInterface(await this.adminsRepository.save(admin));
+  }
+
+  /**
+   * Self-service, unscoped by tenant: must work for a SUPER_ADMIN changing
+   * their own (platform-tenant) account too, regardless of which municipality
+   * they're currently acting as. Never touches isActive.
+   */
+  async updateSelf(id: number, input: UpdateSelfAdminInput): Promise<IAdmin> {
+    const admin = await this.adminsRepository.findOne({ where: { id } });
+    if (!admin) throw new NotFoundException(`Admin with ID ${id} not found`);
+
+    if (input.password) {
+      const valid = await bcrypt.compare(input.currentPassword ?? '', admin.passwordHash);
+      if (!valid) throw new UnauthorizedException('La contraseña actual no es correcta.');
+      admin.passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
+    }
+    if (input.name !== undefined) admin.name = input.name;
 
     return this.toInterface(await this.adminsRepository.save(admin));
   }

@@ -30,6 +30,8 @@ import {
   RESIDENT_LIVE_TOKEN,
 } from '../interfaces/tracking.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
+import { TenantsService } from '../../tenants/services/tenants.service';
+import { resolveActingTenantId } from '../../../common/context/acting-tenant.util';
 
 /** Admin dashboards join per-tenant rooms so a municipality only sees its own trucks. */
 const adminRoom = (tenantId: number): string => `tenant:${tenantId}:admin`;
@@ -63,6 +65,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
     private readonly jwtService: JwtService,
     private readonly authService: AuthService,
     private readonly tenantContext: TenantContextService,
+    private readonly tenantsService: TenantsService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -105,9 +108,17 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
 
       if (payload.role !== UserRole.DRIVER) {
+        // A SUPER_ADMIN "viewing as" a municipality (X-Acting-Tenant-Id on the
+        // REST side) sends the same override here via handshake.auth, since a
+        // socket has no per-request headers — see resolveActingTenantId.
+        const requestedTenantId = client.handshake.auth?.actingTenantId as number | undefined;
+        const tenantId =
+          (await resolveActingTenantId(this.tenantsService, payload.role, requestedTenantId)) ??
+          payload.tenantId;
+
         // ADMIN and SUPER_ADMIN dashboards watch their tenant's trucks.
-        await client.join(adminRoom(payload.tenantId));
-        this.logger.log(`Admin connected: user ${payload.sub} (tenant ${payload.tenantId})`);
+        await client.join(adminRoom(tenantId));
+        this.logger.log(`Admin connected: user ${payload.sub} (tenant ${tenantId})`);
       } else {
         this.logger.log(`Driver connected: user ${payload.sub} (tenant ${payload.tenantId})`);
         await this.tenantContext.runWith(payload.tenantId, () =>

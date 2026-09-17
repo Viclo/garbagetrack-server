@@ -11,6 +11,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantHeaderGuard } from './common/guards/tenant-header.guard';
 import { TenantContextInterceptor } from './common/context/tenant-context.interceptor';
 import { TenantContextService } from './common/context/tenant-context.service';
+import { TenantsService } from './modules/tenants/services/tenants.service';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -67,7 +68,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new HttpExceptionFilter());
   // Tenant context first so every downstream handler runs inside it.
   app.useGlobalInterceptors(
-    new TenantContextInterceptor(app.get(TenantContextService)),
+    new TenantContextInterceptor(app.get(TenantContextService), app.get(TenantsService)),
     new ResponseInterceptor(),
   );
 

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { TenantsService } from './tenants.service';
+import { DEFAULT_TENANT_SLUG, TenantsService } from './tenants.service';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 import { SystemConfigService } from '../../system-config/services/system-config.service';
 import { IPublicTenant } from '../interfaces/tenant.interface';
@@ -22,7 +22,9 @@ export class PublicTenantService {
 
   async findBySlug(slug: string): Promise<IPublicTenant> {
     const tenant = await this.tenantsService.findBySlug(slug);
-    if (!tenant || !tenant.isActive) {
+    // The platform tenant has no residents of its own (see the registration
+    // service); exposing its name made a mis-generated QR look legitimate.
+    if (!tenant || !tenant.isActive || tenant.slug === DEFAULT_TENANT_SLUG) {
       throw new NotFoundException('Municipio no encontrado o no está activo');
     }
 

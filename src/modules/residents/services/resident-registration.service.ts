@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ResidentsService } from './residents.service';
 import { PushSubscriptionsService } from '../../push/services/push-subscriptions.service';
-import { TenantsService } from '../../tenants/services/tenants.service';
+import { DEFAULT_TENANT_SLUG, TenantsService } from '../../tenants/services/tenants.service';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 import { RegisterResidentInput } from '../dtos/inputs/register-resident.input';
 import { RegisterResidentOutput } from '../dtos/outputs/register-resident.output';
@@ -29,7 +29,10 @@ export class ResidentRegistrationService {
     // Public endpoint: no JWT, so resolve and open the tenant context manually
     // from the slug the QR carried.
     const tenant = await this.tenantsService.findBySlug(input.tenantSlug);
-    if (!tenant || !tenant.isActive) {
+    // The platform tenant is not a municipality: it has no routes, so a
+    // resident filed there could never be notified. Only status/unsubscribe
+    // stay open for it, so anyone already registered by mistake can leave.
+    if (!tenant || !tenant.isActive || tenant.slug === DEFAULT_TENANT_SLUG) {
       throw new NotFoundException('Municipio no encontrado o no está activo');
     }
 

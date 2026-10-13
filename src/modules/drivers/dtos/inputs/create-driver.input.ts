@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, IsOptional, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  MinLength,
+  IsOptional,
+  IsDateString,
+  Matches,
+} from 'class-validator';
+import { BOLIVIAN_MOBILE_E164, BOLIVIAN_MOBILE_MESSAGE } from '../../../../common/utils/phone.util';
 
 export class CreateDriverInput {
   @ApiProperty({ example: 'driver01' })
@@ -18,10 +26,15 @@ export class CreateDriverInput {
   @IsNotEmpty()
   name!: string;
 
-  @ApiPropertyOptional({ example: '+59170000000', description: 'Contact phone number' })
+  @ApiPropertyOptional({
+    example: '+59170012345',
+    description: 'Contact mobile (E.164)',
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
-  phone?: string;
+  @Matches(BOLIVIAN_MOBILE_E164, { message: BOLIVIAN_MOBILE_MESSAGE })
+  phone?: string | null;
 
   @ApiPropertyOptional({ example: 'LIC-001', description: "Driver's license number" })
   @IsOptional()

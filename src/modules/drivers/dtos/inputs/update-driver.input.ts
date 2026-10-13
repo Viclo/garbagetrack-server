@@ -1,5 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, MinLength, IsBoolean, IsDateString, ValidateIf } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  MinLength,
+  IsBoolean,
+  IsDateString,
+  ValidateIf,
+  Matches,
+} from 'class-validator';
+import { BOLIVIAN_MOBILE_E164, BOLIVIAN_MOBILE_MESSAGE } from '../../../../common/utils/phone.util';
 
 export class UpdateDriverInput {
   @ApiPropertyOptional()
@@ -13,10 +22,12 @@ export class UpdateDriverInput {
   @MinLength(6)
   password?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: '+59170012345', nullable: true })
   @IsOptional()
+  @ValidateIf((_, value) => value !== null)
   @IsString()
-  phone?: string;
+  @Matches(BOLIVIAN_MOBILE_E164, { message: BOLIVIAN_MOBILE_MESSAGE })
+  phone?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

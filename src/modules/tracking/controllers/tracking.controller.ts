@@ -1,4 +1,13 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { TrackingService } from '../services/tracking.service';
 import { RouteSessionService } from '../services/route-session.service';
@@ -18,7 +27,11 @@ import { TrucksService } from '../../trucks/services/trucks.service';
 import { SchedulesService } from '../../schedules/services/schedules.service';
 import { TrackingGateway } from '../gateways/tracking.gateway';
 import { DriverGpsPositionInput } from '../dtos/inputs/driver-gps-position.input';
-import { findRouteStartProblem, NO_TRUCK_ASSIGNED } from '../utils/route-start-problem.util';
+import {
+  findRouteStartProblem,
+  NO_TRUCK_ASSIGNED,
+  ROUTE_SESSION_CLOSED,
+} from '../utils/route-start-problem.util';
 
 @ApiTags('tracking')
 @ApiBearerAuth()
@@ -101,7 +114,15 @@ export class TrackingController {
   ): Promise<void> {
     const session = await this.routeSessionService.findOpenForDriver(user.sub);
     if (!session || session.id !== position.sessionId || !session.truck || !session.route) {
-      throw new BadRequestException('No active route session found');
+      // A stable code, not just a message: the app's background task keys off
+      // it to reopen the route by itself. Before, this was a bare 400 the task
+      // swallowed, so a session closed by the inactivity sweep (30 min without
+      // signal, or Android killing the app) left the phone showing "Ruta en
+      // curso" while every fix was thrown away and no resident was warned.
+      throw new ConflictException({
+        error: ROUTE_SESSION_CLOSED,
+        message: 'La ruta ya no está activa en el servidor. Vuelve a iniciarla.',
+      });
     }
 
     await this.routeSessionService.recordActivity(session.id);

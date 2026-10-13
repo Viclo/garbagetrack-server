@@ -27,6 +27,14 @@ interface StartableSchedule {
   route: { name: string; isActive: boolean; segments?: unknown[] };
 }
 
+/**
+ * Error code for a GPS fix sent against a session that is no longer open
+ * (closed by "Finalizar ruta" elsewhere, or by the inactivity sweep). Not a
+ * start problem as such, but it lives here so both codes the driver app
+ * branches on are defined in one place.
+ */
+export const ROUTE_SESSION_CLOSED = 'ROUTE_SESSION_CLOSED';
+
 export const NO_TRUCK_ASSIGNED: IRouteStartProblem = {
   code: 'NO_TRUCK_ASSIGNED',
   message:

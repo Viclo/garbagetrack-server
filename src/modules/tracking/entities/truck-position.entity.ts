@@ -5,9 +5,11 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
 import { Truck } from '../../trucks/entities/truck.entity';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { RouteSession } from './route-session.entity';
 
 @Entity('truck_positions')
 export class TruckPosition {
@@ -24,6 +26,25 @@ export class TruckPosition {
   @ManyToOne(() => Truck, { eager: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'truck_id' })
   truck!: Truck;
+
+  /**
+   * The run this fix was sent under. A truck can carry two runs in one day (a
+   * reopened route, a replacement), so grouping by truck and time alone cannot
+   * tell them apart; the archiver moves exactly these fixes into route_tracks.
+   * Null on fixes stored before this column existed. Writers set the plain
+   * `routeSessionId` below; the relation exists so the foreign key is part of
+   * the entity and `migration:generate` does not try to drop it.
+   *
+   * SET NULL, not CASCADE: deleting a driver cascades to their sessions, and
+   * that must not erase fixes the archiver has not moved into history yet.
+   */
+  @ManyToOne(() => RouteSession, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'route_session_id' })
+  routeSession!: RouteSession | null;
+
+  @Index('IDX_truck_positions_route_session')
+  @Column({ name: 'route_session_id', type: 'int', nullable: true })
+  routeSessionId!: number | null;
 
   @Column({ type: 'double precision' })
   latitude!: number;

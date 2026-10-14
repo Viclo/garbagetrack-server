@@ -4,7 +4,11 @@ import { Repository, DataSource } from 'typeorm';
 import { TruckPosition } from '../entities/truck-position.entity';
 import { ProximityService } from '../../proximity/services/proximity.service';
 import { GpsPositionInput } from '../dtos/inputs/gps-position.input';
-import { ILatestTruckPosition, ISegmentMatch } from '../interfaces/tracking.interface';
+import {
+  ILatestTruckPosition,
+  IProcessedFix,
+  ISegmentMatch,
+} from '../interfaces/tracking.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 
 @Injectable()
@@ -41,7 +45,8 @@ export class TrackingService {
     truckId: number,
     routeId: number,
     position: GpsPositionInput,
-  ): Promise<ISegmentMatch | null> {
+    sessionId: number | null,
+  ): Promise<IProcessedFix> {
     const nearest = await this.findNearestSegment(routeId, position.latitude, position.longitude);
     const recordedAt = TrackingService.toRecordedAt(position.timestamp);
     const projection = await this.projectOntoRoute(routeId, position.latitude, position.longitude);
@@ -53,6 +58,7 @@ export class TrackingService {
     await this.positionsRepo.save(
       this.positionsRepo.create({
         truck: { id: truckId } as never,
+        routeSessionId: sessionId,
         latitude: position.latitude,
         longitude: position.longitude,
         currentSegmentIndex: nearest?.segmentIndex ?? null,
@@ -77,7 +83,7 @@ export class TrackingService {
         .catch((err) => this.logger.error('Proximity evaluation failed', err));
     }
 
-    return nearest ?? null;
+    return { match: nearest ?? null, recordedAt, offRouteM: projection?.offRouteM ?? null };
   }
 
   /**

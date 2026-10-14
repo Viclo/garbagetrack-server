@@ -17,6 +17,8 @@ export class RouteOutput {
   @ApiProperty() name!: string;
   @ApiPropertyOptional() description!: string | null;
   @ApiProperty() isActive!: boolean;
+  @ApiProperty({ example: '#0369a1' }) color!: string;
+  @ApiProperty() colorLocked!: boolean;
   @ApiProperty({ type: [SegmentOutput] }) segments!: SegmentOutput[];
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;

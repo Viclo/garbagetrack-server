@@ -35,6 +35,22 @@ export class Route {
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 
+  /**
+   * The route's identity colour on every admin map, one of ROUTE_COLORS
+   * (utils/route-color.util.ts). It belongs to the ROUTE, not the truck: when
+   * another truck or driver covers it, or it is detoured around a blockade,
+   * it is still the same route and must look the same.
+   */
+  @Column({ type: 'varchar', length: 7, default: '#0369a1' })
+  color!: string;
+
+  /**
+   * True once an administrator picked the colour by hand. Automatic choices
+   * (made when the route first gets its geometry) never override it.
+   */
+  @Column({ name: 'color_locked', default: false })
+  colorLocked!: boolean;
+
   @OneToMany(() => RouteSegment, (segment) => segment.route, { cascade: true })
   segments!: RouteSegment[];
 

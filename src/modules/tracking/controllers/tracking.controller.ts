@@ -126,19 +126,23 @@ export class TrackingController {
     }
 
     await this.routeSessionService.recordActivity(session.id);
-    const match = await this.trackingService.processGpsUpdate(
+    const fix = await this.trackingService.processGpsUpdate(
       session.truck.id,
       session.route.id,
       position,
+      session.id,
     );
     const event: ITruckPositionEvent = {
       truckId: session.truck.id,
       routeId: session.route.id,
       latitude: position.latitude,
       longitude: position.longitude,
-      segmentIndex: match?.segmentIndex ?? null,
-      streetName: match?.streetName ?? null,
+      segmentIndex: fix.match?.segmentIndex ?? null,
+      streetName: fix.match?.streetName ?? null,
       timestamp: new Date().toISOString(),
+      sessionId: session.id,
+      recordedAt: fix.recordedAt.toISOString(),
+      offRouteM: fix.offRouteM,
     };
     this.trackingGateway.emitTruckPosition(user.tenantId, event);
   }

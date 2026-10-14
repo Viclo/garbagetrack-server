@@ -22,6 +22,7 @@ import { SystemConfigModule } from './modules/system-config/system-config.module
 import { AssistantModule } from './modules/assistant/assistant.module';
 import { PushModule } from './modules/push/push.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { RouteHistoryModule } from './modules/route-history/route-history.module';
 import { UsernameRegistryModule } from './common/services/username-registry.module';
 
 @Module({
@@ -70,6 +71,7 @@ import { UsernameRegistryModule } from './common/services/username-registry.modu
     AssistantModule,
     PushModule,
     DashboardModule,
+    RouteHistoryModule,
   ],
   controllers: [AppController],
 })

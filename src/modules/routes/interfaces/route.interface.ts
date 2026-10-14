@@ -20,6 +20,10 @@ export interface IRoute {
   name: string;
   description: string | null;
   isActive: boolean;
+  /** Identity colour on admin maps (one of ROUTE_COLORS). */
+  color: string;
+  /** True when an administrator chose the colour; false when automatic. */
+  colorLocked: boolean;
   segments: IRouteSegment[];
   createdAt: Date;
   updatedAt: Date;

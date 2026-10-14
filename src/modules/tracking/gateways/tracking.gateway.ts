@@ -302,7 +302,7 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
       }
 
       const result = await this.trackingService
-        .processGpsUpdate(truckId, routeId, position)
+        .processGpsUpdate(truckId, routeId, position, sessionId ?? null)
         .catch((err) => {
           this.logger.error(`GPS update failed for truck ${truckId}`, err);
           return null;
@@ -313,9 +313,12 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
         routeId,
         latitude: position.latitude,
         longitude: position.longitude,
-        segmentIndex: result?.segmentIndex ?? null,
-        streetName: result?.streetName ?? null,
+        segmentIndex: result?.match?.segmentIndex ?? null,
+        streetName: result?.match?.streetName ?? null,
         timestamp: new Date().toISOString(),
+        sessionId: sessionId ?? null,
+        recordedAt: (result?.recordedAt ?? new Date()).toISOString(),
+        offRouteM: result?.offRouteM ?? null,
       };
 
       this.server.to(adminRoom(data.user.tenantId)).emit('truck-position', event);

@@ -12,6 +12,12 @@ import { ReplaceSegmentsInput } from '../dtos/inputs/replace-segments.input';
 import { INearestSegmentResult, IRoute, IRouteSegment } from '../interfaces/route.interface';
 import { TenantContextService } from '../../../common/context/tenant-context.service';
 import { ResidentsService } from '../../residents/services/residents.service';
+import {
+  chooseRouteColor,
+  IColorNeighbour,
+  leastUsedRouteColor,
+  ROUTE_COLOR_NEIGHBOUR_RADIUS_M,
+} from '../utils/route-color.util';
 
 @Injectable()
 export class RoutesService {
@@ -30,7 +36,16 @@ export class RoutesService {
     const existing = await this.routesRepo.findOne({ where: { name: input.name, tenantId } });
     if (existing) throw new ConflictException(`Route name "${input.name}" is already taken`);
 
-    const route = this.routesRepo.create({ ...input, segments: [], tenantId });
+    // No geometry yet, so no neighbours to avoid: take the least used colour
+    // for now. replaceSegments re-picks it once the route is drawn.
+    const { color, ...fields } = input;
+    const route = this.routesRepo.create({
+      ...fields,
+      segments: [],
+      tenantId,
+      color: color ?? leastUsedRouteColor(await this.colorUsage(tenantId)),
+      colorLocked: color !== undefined,
+    });
     return this.routesRepo.save(route);
   }
 
@@ -58,8 +73,15 @@ export class RoutesService {
     });
     if (!route) throw new NotFoundException(`Route with ID ${id} not found`);
 
-    Object.assign(route, input);
+    const { color, ...fields } = input;
+    Object.assign(route, fields);
+    if (color !== undefined) {
+      route.colorLocked = color !== null;
+      if (color !== null) route.color = color;
+    }
     await this.routesRepo.save(route);
+    // Handed back to automatic: choose now, against the current neighbours.
+    if (color === null) await this.assignAutomaticColor(id);
     return this.findOne(id);
   }
 
@@ -116,6 +138,7 @@ export class RoutesService {
       where: { id: routeId, tenantId: this.tenantContext.tenantId },
     });
     if (!route) throw new NotFoundException(`Route with ID ${routeId} not found`);
+    const firstDrawing = route.centerline === null;
 
     await this.dataSource.transaction(async (manager) => {
       await manager.delete(RouteSegment, { route: { id: routeId } });
@@ -130,6 +153,11 @@ export class RoutesService {
     // The centerline is the chain of those segments, so it has to be rebuilt
     // before residents are re-anchored against it.
     await this.rebuildCenterline(routeId);
+
+    // The colour is chosen against the neighbours the first time the route has
+    // a shape, and then left alone: admins learn "the purple one", and a
+    // redraw must not repaint it. A hand-picked colour is never touched.
+    if (firstDrawing && !route.colorLocked) await this.assignAutomaticColor(routeId);
 
     // The new drawing renumbers segment_index, so every resident assignment on
     // this route is now stale — re-anchor them (and pick up residents that had
@@ -156,6 +184,45 @@ export class RoutesService {
     const routeId = segment.route.id;
     await this.segmentsRepo.remove(segment);
     await this.rebuildCenterline(routeId);
+  }
+
+  /**
+   * Gives the route the palette colour that clashes least with the active
+   * routes around it (see route-color.util.ts for the rule and its limits).
+   * A route with no geometry only balances usage across the municipality.
+   */
+  async assignAutomaticColor(routeId: number): Promise<void> {
+    const tenantId = this.tenantContext.tenantId;
+    const neighbours = await this.dataSource.query<IColorNeighbour[]>(
+      `SELECT o.color,
+              ST_Distance(r.centerline::geography, o.centerline::geography) AS "distanceM",
+              (SELECT count(DISTINCT a.day_of_week)::int
+                 FROM weekly_schedules a
+                 JOIN weekly_schedules b ON b.day_of_week = a.day_of_week AND b.route_id = o.id
+                WHERE a.route_id = r.id) AS "sharedDays"
+         FROM routes r
+         JOIN routes o ON o.tenant_id = r.tenant_id AND o.id <> r.id
+                      AND o.is_active AND o.centerline IS NOT NULL
+        WHERE r.id = $1 AND r.tenant_id = $2 AND r.centerline IS NOT NULL
+          AND ST_DWithin(r.centerline::geography, o.centerline::geography, $3)`,
+      [routeId, tenantId, ROUTE_COLOR_NEIGHBOUR_RADIUS_M],
+    );
+    const color = chooseRouteColor(
+      neighbours.map((n) => ({ ...n, distanceM: Number(n.distanceM), sharedDays: Number(n.sharedDays) })),
+      await this.colorUsage(tenantId, routeId),
+    );
+    await this.routesRepo.update({ id: routeId, tenantId }, { color, colorLocked: false });
+  }
+
+  /** How many of the municipality's routes use each colour, optionally excluding one. */
+  private async colorUsage(tenantId: number, excludeRouteId?: number): Promise<Record<string, number>> {
+    const rows = await this.dataSource.query<Array<{ color: string; count: string }>>(
+      `SELECT color, count(*) AS count FROM routes
+        WHERE tenant_id = $1 AND ($2::int IS NULL OR id <> $2)
+        GROUP BY color`,
+      [tenantId, excludeRouteId ?? null],
+    );
+    return Object.fromEntries(rows.map((r) => [r.color, Number(r.count)]));
   }
 
   async getStats(): Promise<{ total: number }> {

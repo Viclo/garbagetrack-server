@@ -98,7 +98,29 @@ export interface ITruckPositionEvent {
   longitude: number;
   segmentIndex: number | null;
   streetName: string | null;
+  /** When the server relayed the fix. Kept for existing clients. */
   timestamp: string;
+  /**
+   * The run the fix belongs to, when the driver had one. The admin map keys
+   * the driven path by it, so a reopened route starts a new line instead of
+   * joining yesterday's last point to today's first.
+   */
+  sessionId?: number | null;
+  /**
+   * When the DEVICE took the fix. Fixes replayed after a signal gap arrive
+   * minutes late and out of order; the map inserts by this time, otherwise the
+   * drawn path zigzags back to where the truck already was.
+   */
+  recordedAt?: string;
+  /** Metres from the route's centerline; null when the route has none. */
+  offRouteM?: number | null;
+}
+
+/** What one stored fix resolved to, for building the live event. */
+export interface IProcessedFix {
+  match: ISegmentMatch | null;
+  recordedAt: Date;
+  offRouteM: number | null;
 }
 
 /**
